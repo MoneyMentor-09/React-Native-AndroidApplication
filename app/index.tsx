@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -16,7 +16,7 @@ import { router } from "expo-router"; // removed useNavigation import since we c
  * Screen width is used to size each onboarding "page" exactly to the device width
  * so that pagingEnabled snaps cleanly between slides.
  */
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const [screen_width, setWidth] = useState(window.innerWidth);
 
 /**
  * Pagination dot geometry:
@@ -94,22 +94,37 @@ export default function InitialScreen() {
     []
   );
 
+    const [screen_width, setWidth] = useState(window.innerWidth);
+
+    /**
+     * Timer effect for slide transistions.
+     */
   useEffect(() => {
     const autoSlideTimer = setInterval(() => {
       const nextIndex = (currentIndexRef.current + 1) % slides.length;
       flatListRef.current?.scrollToOffset({
-        offset: nextIndex * SCREEN_WIDTH,
+          offset: nextIndex * screen_width,
         animated: true,
       });
       currentIndexRef.current = nextIndex;
     }, 5000);
 
     return () => clearInterval(autoSlideTimer);
-  }, [slides.length]);
+  }, [slides.length, screen_width]);
 
   /**
+   * Window resize effect
+   */
+    useEffect(() => {
+        function handleResize() {
+            setWidth(window.innerWidth);
+        }
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, [])
+  /**
    * Renders one slide/page in the horizontal FlatList.
-   * Each slide has width = SCREEN_WIDTH so paging snaps exactly one slide at a time.
+   * Each slide has width = screen_width so paging snaps exactly one slide at a time.
    */
   const renderSlide = ({
     item,
@@ -117,11 +132,11 @@ export default function InitialScreen() {
   }: {
     item: FeatureSlide;
     index: number;
-  }) => {
+      }) => {
     const inputRange = [
-      (index - 1) * SCREEN_WIDTH,
-      index * SCREEN_WIDTH,
-      (index + 1) * SCREEN_WIDTH,
+        (index - 1) * screen_width,
+        index * screen_width,
+        (index + 1) * screen_width,
     ];
     const slideOpacity = scrollX.interpolate({
       inputRange,
@@ -144,6 +159,7 @@ export default function InitialScreen() {
         style={[
           styles.slide,
           {
+            width: screen_width,
             opacity: slideOpacity,
             transform: [{ scale: slideScale }, { translateY: slideTranslateY }],
           },
@@ -206,12 +222,12 @@ export default function InitialScreen() {
             overScrollMode="never" // disables glow/overscroll (Android)
             decelerationRate="fast" // makes snapping feel tighter
             getItemLayout={(_, index) => ({
-              length: SCREEN_WIDTH,
-              offset: SCREEN_WIDTH * index,
+                length: screen_width,
+                offset: screen_width * index,
               index,
             })}
             onMomentumScrollEnd={(event) => {
-              const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                const index = Math.round(event.nativeEvent.contentOffset.x / screen_width);
               currentIndexRef.current = index;
             }}
           />
@@ -254,7 +270,7 @@ export default function InitialScreen() {
                        * outputRange: 0 -> last dot position
                        */
                       translateX: scrollX.interpolate({
-                        inputRange: [0, (slides.length - 1) * SCREEN_WIDTH],
+                        inputRange: [0, (slides.length - 1) * screen_width],
                         outputRange: [0, (slides.length - 1) * DOT_STEP],
                         extrapolate: "clamp",
                       }),
@@ -272,7 +288,7 @@ export default function InitialScreen() {
          */}
         <View style={styles.bottomSection}>
           <Pressable style={styles.ctaButton} onPress={() => router.push("/signup")}>
-            <Text style={styles.ctaText}>Get Started Free</Text>
+            <Text style={styles.ctaText}>Get Started for Free</Text>
           </Pressable>
 
         {/**
@@ -387,7 +403,7 @@ const styles = StyleSheet.create({
    * paddingBottom gives spacing away from pagination area.
    */
   slide: {
-    width: SCREEN_WIDTH,
+    width: screen_width,
     paddingHorizontal: 28,
     alignItems: "center",
     justifyContent: "center",
