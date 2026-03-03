@@ -424,8 +424,9 @@ export default function SignUpScreen() {
               <Text style={styles.authErrorText}>{authError}</Text>
             )}
           </View>
-
-          {/* Bottom CTA Section */}
+        </ScrollView>
+      </KeyboardAvoidingView>
+      {/* Bottom CTA Section */}
           <View style={styles.bottomSection}>
             <Pressable
               style={[
@@ -453,9 +454,6 @@ export default function SignUpScreen() {
               </TouchableOpacity>
             </View>
           </View>
-
-        </ScrollView>
-      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -615,14 +613,20 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   bottomSection: {
-    marginTop: "auto",
+    position: "absolute",
+    left: 24,
+    right: 24,
+    bottom: 18,
     paddingTop: 16,
-    // paddingBottom: 18,
+    paddingBottom: 28,
+    backgroundColor: "#FFFFFF",
   },
   createButton: {
+    width: "100%",
     height: 54,
     borderRadius: 999,
     backgroundColor: "#1D4ED8",
+    alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
   },
