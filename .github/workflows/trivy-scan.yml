@@ -1,4 +1,35 @@
-name: Trivy Security Scan
+# name: Trivy Security Scan
+
+# on:
+#   push:
+#     branches: [ William/trivy ]
+#   pull_request:
+
+# jobs:
+#   trivy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+
+#       - name: Setup Node
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: 20
+
+#       - name: Install dependencies
+#         run: npm install
+
+#       - name: Run Trivy scan
+#         uses: aquasecurity/trivy-action@master
+#         with:
+#           scan-type: fs
+#           scan-ref: .
+#           severity: HIGH,CRITICAL
+#           ignore-unfixed: true
+
+name: Trivy (SARIF)
 
 on:
   push:
@@ -6,25 +37,31 @@ on:
   pull_request:
 
 jobs:
-  trivy:
+  trivy-sarif:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - run: npm ci
 
-      - name: Run Trivy scan
+      - name: Run Trivy (SARIF)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
