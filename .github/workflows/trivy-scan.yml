@@ -2,7 +2,7 @@ name: Trivy Security Scan
 
 on:
   push:
-    branches: [ main ]
+    branches: [ William/trivy ]
   pull_request:
 
 jobs:
