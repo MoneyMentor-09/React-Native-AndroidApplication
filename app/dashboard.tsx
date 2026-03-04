@@ -8,6 +8,7 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 
 type TabKey = "dashboard" | "transactions" | "wallet" | "notifications" | "chat";
 
@@ -63,6 +64,15 @@ export default function DashboardScreen() {
         <Pressable style={styles.primaryBtn} accessibilityRole="button">
           <Ionicons name="add" size={22} color="#FFFFFF" />
           <Text style={styles.primaryBtnText}>Add Transaction</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.scanBtn}
+          accessibilityRole="button"
+          onPress={() => router.push("/ReceiptCaptureScreen")}
+        >
+          <Ionicons name="receipt-outline" size={20} color="#111827" />
+          <Text style={styles.scanBtnText}>Scan Receipt</Text>
         </Pressable>
 
         <Pressable style={styles.secondaryBtn} accessibilityRole="button">
@@ -199,6 +209,26 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 18,
+  },
+  scanBtn: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 14,
+  },
+  scanBtnText: {
+    color: "#111827",
     fontWeight: "800",
     fontSize: 18,
   },
