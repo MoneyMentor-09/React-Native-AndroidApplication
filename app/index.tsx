@@ -407,20 +407,13 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-
-    // Extra manual padding beyond safe area (can make layout feel "lower").
-    // Reduce/remove if you want content higher.
-    paddingTop: 45,
-
-    // Note: alignContent doesn't affect normal View layouts unless using flexWrap.
-    alignContent: "center",
   },
 
   // Main page container inside the safe area.
   root: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 24,
   },
 
@@ -430,10 +423,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
     marginBottom: 14,
-
-    // Pull header upward relative to the safe area (manual tuning).
-    // Large negative margins can behave differently across devices.
-    marginTop: -95,
+    marginTop: 0,
   },
 
   // Brand row: icon + app name.
