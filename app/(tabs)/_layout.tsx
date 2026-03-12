@@ -1,214 +1,483 @@
-/**
- * Ionicons (Expo Vector Icons)
- * ----------------------------
- * Provides a large library of scalable vector icons that work well across
- * Android and iOS. Here, Ionicons supplies the icons displayed in the
- * bottom tab bar.
- */
+// React imports
+// -------------
+// React must be imported because JSX is used in this component.
+// useRef   → stores persistent mutable values that do NOT trigger re-renders.
+// useState → manages component state (e.g., whether the sidebar is open).
+import React, { useRef, useState } from "react";
+
+// Ionicons
+// --------
+// Icon library bundled with Expo that provides a large set of vector icons.
+// Used throughout the layout for:
+// • Bottom tab bar icons
+// • Sidebar menu icons
+// • Header action icons
 import { Ionicons } from "@expo/vector-icons";
 
-/**
- * Tabs (expo-router)
- * ------------------
- * Creates a bottom tab navigator where each <Tabs.Screen> corresponds
- * to a file-based route inside the (tabs) directory.
- */
-import { Tabs } from "expo-router";
+// expo-router imports
+// -------------------
+// Tabs        → creates the bottom tab navigation container
+// router      → programmatic navigation API (similar to navigation.push())
+// usePathname → returns the current route path ("/dashboard", "/transactions", etc.)
+import { Tabs, router, usePathname } from "expo-router";
 
-/**
- * useSafeAreaInsets
- * -----------------
- * Hook that returns the device safe-area insets (top, bottom, left, right).
- * This helps position UI away from areas like:
- * - iPhone home indicator
- * - notches / rounded corners
- * - Android gesture navigation bar
- */
+// React Native imports
+// --------------------
+// Animated   → performant animation API used to slide the sidebar
+// Pressable  → component for touchable UI elements with press feedback
+// StyleSheet → optimized way to define component styles
+// Text/View  → core layout and text primitives
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+
+// Safe area hook
+// --------------
+// Devices with notches or gesture bars require extra spacing so UI
+// does not overlap the system interface (status bar, home bar).
+// useSafeAreaInsets returns top/bottom/left/right padding values.
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// Sidebar width constant
+// ----------------------
+// Defines the fixed width of the sidebar drawer.
+// This value is reused for:
+// • animation start/end positions
+// • content translation distance
+// Keeping it centralized ensures layout consistency.
+const SIDEBAR_WIDTH = 280;
+
+// SidebarRoute type
+// -----------------
+// TypeScript structure describing each sidebar item.
+//
+// path  → route path used for navigation
+// label → text shown in the sidebar
+// icon  → icon name from Ionicons.glyphMap
+//
+// Restricting paths prevents accidental navigation to invalid routes.
+type SidebarRoute = {
+  path: "/dashboard" | "/transactions" | "/budget" | "/alerts" | "/chat";
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
+
+// Sidebar routes
+// --------------
+// Centralized configuration array describing all sidebar menu items.
+// Benefits:
+// • avoids repeating JSX markup
+// • ensures navigation paths stay consistent
+// • makes the sidebar easily extendable
+const SIDEBAR_ROUTES: SidebarRoute[] = [
+  { path: "/dashboard", label: "Dashboard", icon: "grid-outline" },
+  { path: "/transactions", label: "Transactions", icon: "receipt-outline" },
+  { path: "/budget", label: "Budget", icon: "wallet-outline" },
+  { path: "/alerts", label: "Alerts", icon: "alert-circle-outline" },
+  { path: "/chat", label: "Chat", icon: "chatbox-outline" },
+];
+
+// Header titles map
+// -----------------
+// Maps route segments to the title shown in the header.
+// Example:
+// /dashboard     → Dashboard
+// /transactions  → Transactions
+//
+// Using a map keeps title logic centralized instead of hardcoding
+// titles inside each screen configuration.
+const HEADER_TITLES: Record<string, string> = {
+  dashboard: "Dashboard",
+  transactions: "Transactions",
+  budget: "Budget",
+  alerts: "Alerts",
+  chat: "Chat",
+};
+
 /**
- * TabsLayout
- * ----------
- * Defines the global tab navigation layout used by the app.
- * In expo-router, placing this file in the (tabs) directory (typically as
- * app/(tabs)/_layout.tsx) configures the tab navigator for those routes.
+ * TabsLayout Component
+ * --------------------
+ * This layout wraps the main application screens.
+ *
+ * Responsibilities:
+ * 1. Define the bottom tab navigator
+ * 2. Provide a shared header configuration
+ * 3. Implement a push-style animated sidebar
+ * 4. Handle route-based header titles
+ *
+ * In expo-router, a _layout.tsx file controls navigation structure.
  */
 export default function TabsLayout() {
-  /**
-   * insets.bottom is especially important for tab bars so the buttons
-   * do not sit underneath the home indicator / gesture bar.
-   */
+  // Safe area values for the device.
+  // Example values:
+  // iPhone with notch → top ≈ 44
+  // Android gesture nav → bottom ≈ 16–30
   const insets = useSafeAreaInsets();
 
+  // Current pathname returned by expo-router.
+  // Example values:
+  // "/dashboard"
+  // "/transactions"
+  // "/budget"
+  const pathname = usePathname();
+
+  // React state tracking whether the sidebar is open.
+  // Used to:
+  // • enable/disable pointer events
+  // • render the dismiss overlay
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Animated value controlling sidebar horizontal position.
+  //
+  // Initial value:
+  // -SIDEBAR_WIDTH
+  //
+  // This places the sidebar completely off-screen to the left.
+  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+
+  // Extract the last segment of the route path.
+  //
+  // Example:
+  // "/transactions" → ["transactions"] → "transactions"
+  // "/dashboard" → ["dashboard"] → "dashboard"
+  //
+  // filter(Boolean) removes empty strings from splitting.
+  const currentSegment =
+    pathname.split("/").filter(Boolean).at(-1) ?? "dashboard";
+
+  // Determine the header title from the route map.
+  // If a route is not found, fallback title is "MoneyMap".
+  const currentTitle = HEADER_TITLES[currentSegment] ?? "MoneyMap";
+
+  /**
+   * openSidebar()
+   * -------------
+   * Opens the sidebar drawer using an animated slide transition.
+   *
+   * Steps:
+   * 1. Set state to open
+   * 2. Animate translateX from -SIDEBAR_WIDTH → 0
+   */
+  const openSidebar = () => {
+    setIsSidebarOpen(true);
+
+    Animated.timing(slideAnim, {
+      toValue: 0, // sidebar fully visible
+      duration: 200, // quick UI animation
+      useNativeDriver: true, // offloads animation to native thread
+    }).start();
+  };
+
+  /**
+   * closeSidebar()
+   * --------------
+   * Closes the sidebar by reversing the animation.
+   *
+   * translateX moves from 0 → -SIDEBAR_WIDTH.
+   * When animation completes we update state.
+   */
+  const closeSidebar = () => {
+    Animated.timing(slideAnim, {
+      toValue: -SIDEBAR_WIDTH,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setIsSidebarOpen(false);
+    });
+  };
+
+  /**
+   * contentTranslateX
+   * -----------------
+   * Interpolated animated value that shifts the page content.
+   *
+   * When sidebar moves:
+   * -280 → 0
+   *
+   * Content moves:
+   * 0 → +280
+   *
+   * This creates a **push drawer effect** rather than overlay.
+   */
+  const contentTranslateX = slideAnim.interpolate({
+    inputRange: [-SIDEBAR_WIDTH, 0],
+    outputRange: [0, SIDEBAR_WIDTH],
+    extrapolate: "clamp",
+  });
+
+  /**
+   * contentScrimOpacity
+   * -------------------
+   * Controls opacity of the dark overlay behind the drawer.
+   *
+   * Purpose:
+   * • visually indicate the page is inactive
+   * • allow tapping outside the drawer to close it
+   */
+  const contentScrimOpacity = slideAnim.interpolate({
+    inputRange: [-SIDEBAR_WIDTH, 0],
+    outputRange: [0, 0.08],
+    extrapolate: "clamp",
+  });
+
+  /**
+   * openRouteFromSidebar()
+   * ----------------------
+   * Navigates to a selected route from the sidebar.
+   *
+   * Steps:
+   * 1. Close sidebar
+   * 2. Push new route using expo-router
+   */
+  const openRouteFromSidebar = (path: SidebarRoute["path"]) => {
+    closeSidebar();
+    router.push(path);
+  };
+
   return (
-    /**
-     * Tabs acts as the container for all tab screens.
-     * The `screenOptions` prop sets defaults applied to every tab screen,
-     * unless overridden by that screen’s own `options`.
-     */
-    <Tabs
-      screenOptions={{
-        /**
-         * headerShown
-         * -----------
-         * Disables the default top header for all tab screens.
-         * Useful when:
-         * - screens implement their own custom headers
-         * - you want more vertical space
-         */
-        headerShown: false,
+    // Root container wrapping sidebar and animated content
+    <View style={styles.root}>
+      {/* Sidebar drawer */}
+      <Animated.View
+        pointerEvents={isSidebarOpen ? "auto" : "none"}
+        style={[
+          styles.sidebar,
+          {
+            width: SIDEBAR_WIDTH,
+            paddingTop: insets.top + 24,
+            transform: [{ translateX: slideAnim }],
+          },
+        ]}
+      >
+        {/* Sidebar header */}
+        <Text style={styles.sidebarTitle}>Menu</Text>
 
-        /**
-         * Active / Inactive Colors
-         * ------------------------
-         * Control the tint color of tab icons and labels.
-         */
-        tabBarActiveTintColor: "#2563EB",
-        tabBarInactiveTintColor: "#6B7280",
+        {/* Render sidebar menu items */}
+        {SIDEBAR_ROUTES.map((route) => (
+          <Pressable
+            key={route.path}
+            style={styles.menuItem}
+            onPress={() => openRouteFromSidebar(route.path)}
+          >
+            <Ionicons name={route.icon} size={20} color="#111827" />
+            <Text style={styles.menuItemText}>{route.label}</Text>
+          </Pressable>
+        ))}
+      </Animated.View>
 
-        /**
-         * tabBarStyle
-         * -----------
-         * Visual and layout styling for the tab bar container.
-         * Key goal: ensure the bar is tall enough and padded enough
-         * to remain usable on devices with bottom safe-area insets.
-         */
-        tabBarStyle: {
-          /**
-           * Height is increased by the bottom inset so that the content
-           * clears the home indicator/gesture bar.
-           *
-           * Base height = 62
-           * Additional height = insets.bottom
-           */
-          height: 62 + insets.bottom,
+      {/* Animated page container */}
+      <Animated.View
+        style={[
+          styles.content,
+          {
+            transform: [{ translateX: contentTranslateX }],
+          },
+        ]}
+      >
+        {/* Bottom Tab Navigator */}
+        <Tabs
+          screenOptions={{
+            headerShown: true,
+            tabBarActiveTintColor: "#2563EB",
+            tabBarInactiveTintColor: "#6B7280",
 
-          /**
-           * Adds some breathing room above icons/labels.
-           */
-          paddingTop: 8,
+            headerStyle: {
+              backgroundColor: "#ffffff00",
+            },
 
-          /**
-           * Ensures a minimum bottom padding.
-           * On devices with a large bottom inset, it uses that inset.
-           * Otherwise, it uses at least 10px so the bar doesn't look cramped.
-           */
-          paddingBottom: Math.max(insets.bottom, 10),
+            headerShadowVisible: false,
 
-          /**
-           * Subtle divider line separating tab bar from the screen content.
-           */
-          borderTopColor: "#E5E7EB",
+            headerTitleStyle: {
+              fontSize: 23,
+              fontWeight: "800",
+              color: "#111827",
+            },
 
-          /**
-           * Tab bar background color.
-           */
-          backgroundColor: "#FFFFFF",
-        },
+            headerTitleAlign: "center",
 
-        /**
-         * tabBarLabelStyle
-         * ----------------
-         * Typography styling for the text labels under each icon.
-         */
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600",
-        },
-      }}
-    >
-      {/*
-        DASHBOARD TAB
-        -------------
-        Route must match a file in this navigator group, e.g.:
-        app/(tabs)/dashboard.tsx
-      */}
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          /**
-           * Title is used as the label under the tab icon by default.
-           */
-          title: "Dashboard",
+            headerTitle: currentTitle,
 
-          /**
-           * tabBarIcon receives { color, size } from the navigator.
-           * Those values depend on whether the tab is active/inactive
-           * and the platform default sizing rules.
-           */
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid-outline" size={size} color={color} />
-          ),
-        }}
-      />
+            /**
+             * headerLeft
+             * ----------
+             * Settings/menu button that opens the sidebar.
+             */
+            headerLeft: () => (
+              <Pressable
+                style={styles.iconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Open menu"
+                onPress={openSidebar}
+              >
+                <Ionicons name="settings-outline" size={24} color="#111827" />
+              </Pressable>
+            ),
 
-      {/*
-        TRANSACTIONS TAB
-        ----------------
-        Shows transaction history or a list of purchases/income events.
-        Expects a matching file:
-        app/(tabs)/transactions.tsx
-      */}
-      <Tabs.Screen
-        name="transactions"
-        options={{
-          title: "Transactions",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="receipt-outline" size={size} color={color} />
-          ),
-        }}
-      />
+            /**
+             * headerRight
+             * -----------
+             * Placeholder view used to keep the title centered.
+             * Without this, the title would shift slightly left.
+             */
+            headerRight: () => <View style={styles.headerRightPlaceholder} />,
 
-      {/*
-        BUDGET TAB
-        ----------
-        Budget overview screen (limits, category spending, goals, etc.).
-        Expects:
-        app/(tabs)/budget.tsx
-      */}
-      <Tabs.Screen
-        name="budget"
-        options={{
-          title: "Budget",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="wallet-outline" size={size} color={color} />
-          ),
-        }}
-      />
+            /**
+             * Tab bar styling
+             * ---------------
+             * Height includes bottom safe area so icons
+             * are not obstructed by gesture navigation.
+             */
+            tabBarStyle: {
+              height: 62 + insets.bottom,
+              paddingTop: 8,
+              paddingBottom: Math.max(insets.bottom, 10),
+              borderTopColor: "#E5E7EB",
+              backgroundColor: "#FFFFFF",
+            },
 
-      {/*
-        ALERTS TAB
-        ----------
-        Notifications / budget warnings / reminders.
-        Expects:
-        app/(tabs)/alerts.tsx
-      */}
-      <Tabs.Screen
-        name="alerts"
-        options={{
-          title: "Alerts",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="alert-circle-outline" size={size} color={color} />
-          ),
-        }}
-      />
+            tabBarLabelStyle: {
+              fontSize: 12,
+              fontWeight: "600",
+            },
+          }}
+        >
+          {/* Dashboard tab */}
+          <Tabs.Screen
+            name="dashboard"
+            options={{
+              title: "Dashboard",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="grid-outline" size={size} color={color} />
+              ),
+            }}
+          />
 
-      {/*
-        CHAT TAB
-        --------
-        Conversational assistant / support.
-        Expects:
-        app/(tabs)/chat.tsx
-      */}
-      <Tabs.Screen
-        name="chat"
-        options={{
-          title: "Chat",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbox-outline" size={size} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+          {/* Transactions tab */}
+          <Tabs.Screen
+            name="transactions"
+            options={{
+              title: "Transactions",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="receipt-outline" size={size} color={color} />
+              ),
+            }}
+          />
+
+          {/* Budget tab */}
+          <Tabs.Screen
+            name="budget"
+            options={{
+              title: "Budget",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="wallet-outline" size={size} color={color} />
+              ),
+            }}
+          />
+
+          {/* Alerts tab */}
+          <Tabs.Screen
+            name="alerts"
+            options={{
+              title: "Alerts",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={size}
+                  color={color}
+                />
+              ),
+            }}
+          />
+
+          {/* Chat tab */}
+          <Tabs.Screen
+            name="chat"
+            options={{
+              title: "Chat",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="chatbox-outline" size={size} color={color} />
+              ),
+            }}
+          />
+        </Tabs>
+
+        {/* Overlay used to close sidebar when tapping outside */}
+        {isSidebarOpen && (
+          <Pressable onPress={closeSidebar} style={styles.contentDismissArea}>
+            <Animated.View
+              style={[styles.contentScrim, { opacity: contentScrimOpacity }]}
+            />
+          </Pressable>
+        )}
+      </Animated.View>
+    </View>
   );
 }
+
+/**
+ * Stylesheet
+ * ----------
+ * Centralized styling for layout components.
+ * StyleSheet.create optimizes styles for React Native rendering.
+ */
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+
+  headerRightPlaceholder: {
+    width: 40,
+  },
+
+  iconBtn: {
+    padding: 19,
+    borderRadius: 12,
+  },
+
+  sidebar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 10,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 19,
+    borderRightWidth: 1,
+    borderRightColor: "#E5E7EB",
+  },
+
+  content: {
+    flex: 1,
+    zIndex: 20,
+    backgroundColor: "#FFFFFF",
+  },
+
+  contentDismissArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  contentScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#111827",
+  },
+
+  sidebarTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 18,
+  },
+
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+  },
+
+  menuItemText: {
+    fontSize: 17,
+    color: "#111827",
+    fontWeight: "600",
+  },
+});
