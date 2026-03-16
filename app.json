@@ -29,7 +29,9 @@
     },
     "plugins": [
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

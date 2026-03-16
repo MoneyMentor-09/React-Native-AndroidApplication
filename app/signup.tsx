@@ -12,8 +12,7 @@ import {
   Image,
   Platform,
   KeyboardAvoidingView,
-  Pressable,
-  SafeAreaView,
+  Pressable,  
   ScrollView,
   StyleSheet,
   Text,
@@ -48,6 +47,8 @@ import { supabase } from "../lib/supabase";
  * Keeps OAuth logic separate from UI logic.
  */
 import { signInWithOAuth } from "../lib/auth";
+
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SignUpScreen() {
   /**
@@ -245,8 +246,8 @@ export default function SignUpScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
+        behavior={Platform.OS === "android" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "android" ? 40 : 0}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -424,8 +425,9 @@ export default function SignUpScreen() {
               <Text style={styles.authErrorText}>{authError}</Text>
             )}
           </View>
-
-          {/* Bottom CTA Section */}
+        </ScrollView>
+      </KeyboardAvoidingView>
+      {/* Bottom CTA Section */}
           <View style={styles.bottomSection}>
             <Pressable
               style={[
@@ -449,13 +451,10 @@ export default function SignUpScreen() {
             <View style={styles.signInRow}>
               <Text style={styles.signInPrompt}>Already have an account? </Text>
               <TouchableOpacity onPress={() => router.push("/login")}>
-                <Text style={styles.signInLink}>Sign in</Text>
+                <Text style={styles.signInLink}>Log in</Text>
               </TouchableOpacity>
             </View>
           </View>
-
-        </ScrollView>
-      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -475,7 +474,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   topContent: {
-    paddingTop: 90,
+    paddingTop: 10,
   },
   backButton: {
     alignSelf: "flex-start",
@@ -615,14 +614,20 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   bottomSection: {
-    marginTop: "auto",
+    position: "absolute",
+    left: 24,
+    right: 24,
+    bottom: 18,
     paddingTop: 16,
-    // paddingBottom: 18,
+    paddingBottom: 28,
+    backgroundColor: "#FFFFFF",
   },
   createButton: {
+    width: "100%",
     height: 54,
     borderRadius: 999,
     backgroundColor: "#1D4ED8",
+    alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
   },

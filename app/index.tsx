@@ -1,511 +1,561 @@
+/**
+ * ==========================================================
+ * ONBOARDING / INITIAL SCREEN (Auto-Advancing Carousel)
+ * ==========================================================
+ * Purpose:
+ * - Presents a multi-slide onboarding carousel describing key app features.
+ * - Auto-advances slides on a timer while still allowing manual swiping.
+ * - Uses scroll-driven animations for slide emphasis and a moving pagination indicator.
+ * - Provides CTAs to go to Sign Up or Sign In.
+ *
+ * Key implementation details:
+ * - Animated.FlatList + Animated.Value(scrollX) drives slide + pagination animations.
+ * - useRef stores mutable values (scrollX, list ref, current index) without re-rendering.
+ * - useMemo keeps slides array stable (better FlatList perf).
+ * - useEffect starts/cleans interval for auto-advance.
+ */
+
+// React hooks used for stateful logic without a class component:
+// - useRef: store mutable values (Animated.Value, refs, index) without re-rendering
+// - useMemo: keep the slides array stable across renders
+// - useEffect: set up/clean up the auto-advance timer
 import { useEffect, useMemo, useRef } from "react";
+
+// React Native primitives used to build the onboarding UI:
+// - Animated: runs performant animations tied to scroll position
+// - Dimensions: reads device window size (used for slide width)
+// - Image/Text/View: UI building blocks
+// - Pressable/TouchableOpacity: tap targets for CTAs
+// - StyleSheet: centralizes styles with validation/performance benefits
 import {
-    Animated,
-    Dimensions,
-    Image,
-    Pressable,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Dimensions,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { router } from "expo-router"; // removed useNavigation import since we can use router directly
+
+// SafeAreaView prevents content from overlapping device notch/status bar.
+import { SafeAreaView } from "react-native-safe-area-context";
+
+// Expo Router API for navigation between screens in an Expo Router project.
+// router.push("/signup") pushes a new route onto the stack.
+import { router } from "expo-router";
 
 /**
- * Screen width is used to size each onboarding "page" exactly to the device width
- * so that pagingEnabled snaps cleanly between slides.
+ * SCREEN_WIDTH
+ * ------------
+ * Read the device width once. Each onboarding slide is exactly this width,
+ * so `pagingEnabled` snaps perfectly slide-by-slide.
  */
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 /**
- * Pagination dot geometry:
- * - DOT_SIZE: diameter of each inactive dot
- * - DOT_GAP: spacing between dots
- * - DOT_STEP: total horizontal distance from one dot center to the next
- * - ACTIVE_DOT_WIDTH: the active indicator is a pill (wider than DOT_SIZE)
+ * Pagination geometry constants
+ * -----------------------------
+ * DOT_SIZE: diameter of each inactive dot
+ * DOT_GAP: spacing between dots
+ * DOT_STEP: the distance the active indicator moves per slide (dot + gap)
+ * ACTIVE_DOT_WIDTH: active indicator width (set equal to DOT_SIZE here)
+ *
+ * Note: If you want a "pill" indicator, set ACTIVE_DOT_WIDTH > DOT_SIZE.
  */
-const DOT_SIZE = 8;
-const DOT_GAP = 10;
+const DOT_SIZE = 7;
+const DOT_GAP = 12;
 const DOT_STEP = DOT_SIZE + DOT_GAP;
-const ACTIVE_DOT_WIDTH = 22;
+const ACTIVE_DOT_WIDTH = DOT_SIZE;
 
 /**
- * Strongly-typed shape of each onboarding slide.
- * key: unique id used by FlatList
- * title/description: text displayed on each page
+ * FeatureSlide type
+ * -----------------
+ * Defines the shape of each slide item rendered by the FlatList.
+ * - key: unique identifier (used by keyExtractor)
+ * - title/description: visible text content
  */
 type FeatureSlide = {
-    key: string;
-    title: string;
-    description: string;
-    // icon?: string; // Optional placeholder if you later add icons
+  key: string;
+  title: string;
+  description: string;
 };
 
 export default function InitialScreen() {
+  /**
+   * scrollX
+   * -------
+   * Animated.Value that tracks the current horizontal scroll position (in pixels).
+   * This is used to:
+   * - animate each slide's opacity/scale/position
+   * - animate the active pagination indicator
+   */
+  const scrollX = useRef(new Animated.Value(0)).current;
+
+  /**
+   * flatListRef
+   * -----------
+   * Reference to the Animated.FlatList instance so we can call scrollToOffset()
+   * from the auto-advance interval.
+   */
+  const flatListRef = useRef<Animated.FlatList<FeatureSlide> | null>(null);
+
+  /**
+   * currentIndexRef
+   * ---------------
+   * Stores the current slide index without re-rendering the component.
+   * This keeps the auto-advance timer aligned with user swipes.
+   */
+  const currentIndexRef = useRef(0);
+
+  /**
+   * slides
+   * ------
+   * Memoized slide data to keep the array reference stable between renders.
+   * This prevents unnecessary FlatList re-processing.
+   */
+  const slides = useMemo<FeatureSlide[]>(
+    () => [
+      {
+        key: "budgeting",
+        title: "Smart Budgeting",
+        description: "Create and track budgets. Get real-time alerts.",
+      },
+      {
+        key: "tracking",
+        title: "Transaction Tracking",
+        description: "Automatically categorize and track all your expenses.",
+      },
+      {
+        key: "advisor",
+        title: "AI Financial Advisor",
+        description: "Personalized financial advice powered by AI.",
+      },
+      {
+        key: "savings",
+        title: "Savings Goals",
+        description: "Set and track progress with visual indicators.",
+      },
+    ],
+    []
+  );
+
+  /**
+   * Auto-advance timer
+   * ------------------
+   * Every 5 seconds:
+   * - compute next index (wrap back to 0 at the end)
+   * - scroll the FlatList to the correct offset
+   * - update currentIndexRef so the next tick continues correctly
+   *
+   * Cleanup:
+   * - clearInterval when component unmounts to avoid memory leaks.
+   */
+  useEffect(() => {
+    const autoSlideTimer = setInterval(() => {
+      // Next index loops back to 0 after the last slide.
+      const nextIndex = (currentIndexRef.current + 1) % slides.length;
+
+      // Scroll horizontally to the slide's left edge (index * screen width).
+      flatListRef.current?.scrollToOffset({
+        offset: nextIndex * SCREEN_WIDTH,
+        animated: true,
+      });
+
+      // Persist current index for the next interval tick.
+      currentIndexRef.current = nextIndex;
+    }, 5000);
+
+    return () => clearInterval(autoSlideTimer);
+  }, [slides.length]);
+
+  /**
+   * renderSlide
+   * -----------
+   * Renders one slide and applies subtle scroll-driven animations:
+   * - opacity: center slide is brightest
+   * - scale: center slide is slightly larger
+   * - translateY: center slide sits slightly higher (lift effect)
+   */
+  const renderSlide = ({
+    item,
+    index,
+  }: {
+    item: FeatureSlide;
+    index: number;
+  }) => {
     /**
-     * Expo Router navigation object.
-     * Note:
-     * - You already use router.push("/signup") in the CTA
-     * - useNavigation() is used below for the "Sign In" button.
-     *
-     * In Expo Router you can standardize on router.push("/login") instead of
-     * mixing router and navigation to avoid type casts.
+     * inputRange
+     * ----------
+     * Defines a 3-point window for interpolation:
+     * [previous slide offset, current slide offset, next slide offset]
      */
-    // const navigation = useNavigation();
+    const inputRange = [
+      (index - 1) * SCREEN_WIDTH,
+      index * SCREEN_WIDTH,
+      (index + 1) * SCREEN_WIDTH,
+    ];
 
-    /**
-     * Animated value representing horizontal scroll offset in pixels.
-     * This drives the active pagination indicator (dotActive) movement.
-     *
-     * useRef keeps the same Animated.Value instance across re-renders.
-     */
-    const scrollX = useRef(new Animated.Value(0)).current;
-    const flatListRef = useRef<Animated.FlatList<FeatureSlide> | null>(null);
-    const currentIndexRef = useRef(0);
+    // Fade in at center; fade out on either side.
+    const slideOpacity = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.45, 1, 0.45],
+      extrapolate: "clamp",
+    });
 
-    /**
-     * Slides are memoized so the array reference stays stable
-     * (prevents FlatList from unnecessary re-renders).
-     */
-    const slides = useMemo<FeatureSlide[]>(
-        () => [
-            {
-                key: "budgeting",
-                title: "Smart Budgeting",
-                description: "Create and track budgets. Get real-time alerts.",
-            },
-            {
-                key: "tracking",
-                title: "Transaction Tracking",
-                description: "Automatically categorize and track all your expenses.",
-            },
-            {
-                key: "advisor",
-                title: "AI Financial Advisor",
-                description: "Personalized financial advice powered by AI.",
-            },
-            {
-                key: "savings",
-                title: "Savings Goals",
-                description: "Set and track progress with visual indicators.",
-            },
-        ],
-        []
-    );
+    // Slight zoom on the centered slide.
+    const slideScale = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.94, 1, 0.94],
+      extrapolate: "clamp",
+    });
 
-    useEffect(() => {
-        const autoSlideTimer = setInterval(() => {
-            const nextIndex = (currentIndexRef.current + 1) % slides.length;
-            flatListRef.current?.scrollToOffset({
-                offset: nextIndex * SCREEN_WIDTH,
-                animated: true,
-            });
-            currentIndexRef.current = nextIndex;
-        }, 5000);
-
-        return () => clearInterval(autoSlideTimer);
-    }, [slides.length]);
-
-    /**
-     * Renders one slide/page in the horizontal FlatList.
-     * Each slide has width = SCREEN_WIDTH so paging snaps exactly one slide at a time.
-     */
-    const renderSlide = ({
-        item,
-        index,
-    }: {
-        item: FeatureSlide;
-        index: number;
-    }) => {
-        const inputRange = [
-            (index - 1) * SCREEN_WIDTH,
-            index * SCREEN_WIDTH,
-            (index + 1) * SCREEN_WIDTH,
-        ];
-        const slideOpacity = scrollX.interpolate({
-            inputRange,
-            outputRange: [0.45, 1, 0.45],
-            extrapolate: "clamp",
-        });
-        const slideScale = scrollX.interpolate({
-            inputRange,
-            outputRange: [0.94, 1, 0.94],
-            extrapolate: "clamp",
-        });
-        const slideTranslateY = scrollX.interpolate({
-            inputRange,
-            outputRange: [10, 0, 10],
-            extrapolate: "clamp",
-        });
-
-        return (
-            <Animated.View
-                style={[
-                    styles.slide,
-                    {
-                        opacity: slideOpacity,
-                        transform: [{ scale: slideScale }, { translateY: slideTranslateY }],
-                    },
-                ]}
-            >
-                {/* Placeholder for a future icon or illustration
-        <View style={styles.iconPlaceholder}>
-          <Text style={styles.iconText}>{item.icon}</Text>
-        </View>
-        */}
-                <Text style={styles.slideTitle}>{item.title}</Text>
-                <Text style={styles.slideDescription}>{item.description}</Text>
-            </Animated.View>
-        );
-    };
+    // Small vertical lift for the centered slide.
+    const slideTranslateY = scrollX.interpolate({
+      inputRange,
+      outputRange: [10, 0, 10],
+      extrapolate: "clamp",
+    });
 
     return (
-        /**
-         * SafeAreaView keeps content out of the notch/status bar areas.
-         */
-        <SafeAreaView style={styles.safeArea}>
-            <View style={styles.root}>
-                {/* Header area (currently mostly commented-out). */}
-                <View style={styles.header}>
-                    <View style={styles.brand}>
-                        <Image source={require("../assets/letter-m (1).png")} style={styles.brandIcon} />
-                        <Text style={styles.logoText}>Money Mentor</Text>
-                    </View>
-                </View>
-
-                {/**
-         * Animated.FlatList
-         * - horizontal + pagingEnabled: gives a swipeable onboarding carousel
-         * - onScroll updates scrollX which drives pagination animation
-         * - getItemLayout improves performance by letting FlatList compute offsets
-         */}
-                <View style={styles.contentSection}>
-                    <Animated.FlatList
-                        ref={flatListRef}
-                        data={slides}
-                        keyExtractor={(item) => item.key}
-                        horizontal
-                        pagingEnabled
-                        showsHorizontalScrollIndicator={false}
-                        renderItem={renderSlide}
-                        onScroll={
-                            /**
-                             * Animated.event maps the native scroll position into scrollX.
-                             * useNativeDriver: true makes this animation run on the native thread.
-                             *
-                             * Note: Here we only animate transform translateX (supported by native driver).
-                             */
-                            Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-                                useNativeDriver: true,
-                            })
-                        }
-                        scrollEventThrottle={16} // ~60fps updates
-                        bounces={false} // disables bounce at ends (iOS)
-                        disableIntervalMomentum // reduces "coasting" between pages
-                        overScrollMode="never" // disables glow/overscroll (Android)
-                        decelerationRate="fast" // makes snapping feel tighter
-                        getItemLayout={(_, index) => ({
-                            length: SCREEN_WIDTH,
-                            offset: SCREEN_WIDTH * index,
-                            index,
-                        })}
-                        onMomentumScrollEnd={(event) => {
-                            const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-                            currentIndexRef.current = index;
-                        }}
-                    />
-
-                    {/**
-           * Pagination row
-           * - renders inactive dots
-           * - overlays an Animated "pill" (dotActive) that slides horizontally as user swipes
-           */}
-                    <View
-                        style={[
-                            styles.pagination,
-                            {
-                                // Total width = (dots * DOT_SIZE) + (gaps between dots)
-                                width: slides.length * DOT_SIZE + (slides.length - 1) * DOT_GAP,
-                            },
-                        ]}
-                    >
-                        {/* Render inactive dots */}
-                        {slides.map((slide, index) => (
-                            <View
-                                key={slide.key}
-                                style={[
-                                    styles.dot,
-                                    { marginRight: index === slides.length - 1 ? 0 : DOT_GAP },
-                                ]}
-                            />
-                        ))}
-
-                        {/* Active indicator pill that animates based on scrollX */}
-                        <Animated.View
-                            style={[
-                                styles.dotActive,
-                                {
-                                    transform: [
-                                        {
-                                            /**
-                                             * Convert scroll offset (pixels) into dot-step offset.
-                                             * inputRange: 0 -> last slide offset
-                                             * outputRange: 0 -> last dot position
-                                             */
-                                            translateX: scrollX.interpolate({
-                                                inputRange: [0, (slides.length - 1) * SCREEN_WIDTH],
-                                                outputRange: [0, (slides.length - 1) * DOT_STEP],
-                                                extrapolate: "clamp",
-                                            }),
-                                        },
-                                    ],
-                                },
-                            ]}
-                        />
-                    </View>
-                </View>
-
-                {/**
-         * Primary CTA: routes user to signup.
-         * router.push adds to history stack; use replace if you don't want back navigation.
-         */}
-                <View style={styles.bottomSection}>
-                    <Pressable style={styles.ctaButton} onPress={() => router.push("/signup")}>
-                        <Text style={styles.ctaText}>Get Started for Free</Text>
-                    </Pressable>
-
-                    {/**
-         * Secondary action: Sign In
-         * Currently uses navigation.navigate with a type cast.
-         *
-         * In Expo Router, you can simplify to: router.push("/login")
-         * and remove useNavigation entirely (cleaner + no casting).
-         */}
-                    <TouchableOpacity
-                        style={styles.secondarySignIn}
-                        onPress={() => router.push("/login")}
-                        activeOpacity={0.75}
-                    >
-                        <Text style={styles.secondarySignInText}>Sign In</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </SafeAreaView>
+      <Animated.View
+        // Animated container allows opacity/transform updates during scroll.
+        style={[
+          styles.slide,
+          {
+            opacity: slideOpacity,
+            transform: [{ scale: slideScale }, { translateY: slideTranslateY }],
+          },
+        ]}
+      >
+        {/* Slide text content */}
+        <Text style={styles.slideTitle}>{item.title}</Text>
+        <Text style={styles.slideDescription}>{item.description}</Text>
+      </Animated.View>
     );
+  };
+
+  return (
+    /**
+     * SafeAreaView
+     * ------------
+     * Keeps content out of the status bar / notch.
+     * edges={["top"]} pads only the top safe area.
+     *
+     * Note: styles.safeArea includes paddingTop: 45 which adds additional
+     * spacing beyond safe area. If the layout feels too low, reduce it.
+     */
+    <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      {/* Root layout: branding header + carousel + CTA section */}
+      <View style={styles.root}>
+        {/* ======================================================
+           HEADER / BRANDING
+           ====================================================== */}
+        <View style={styles.header}>
+          <View style={styles.brand}>
+            {/* App icon (local asset). Ensure the path matches your project. */}
+            <Image
+              source={require("../assets/letter-m (1).png")}
+              style={styles.brandIcon}
+            />
+
+            {/* App name / logo text */}
+            <Text style={styles.logoText}>Money Mentor</Text>
+          </View>
+        </View>
+
+        {/* ======================================================
+           CAROUSEL SECTION
+           Animated.FlatList + pagination indicator
+           ====================================================== */}
+        <View style={styles.contentSection}>
+          <Animated.FlatList
+            // Ref enables scrollToOffset for auto-advance.
+            ref={flatListRef}
+            data={slides}
+            keyExtractor={(item) => item.key}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            renderItem={renderSlide}
+            /**
+             * onScroll ties the native scroll position into scrollX.
+             * useNativeDriver: true keeps updates on the native thread for smoothness.
+             */
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+              { useNativeDriver: true }
+            )}
+            // How often scroll events are fired (16ms ~= 60fps).
+            scrollEventThrottle={16}
+            // Reduce bounce/overscroll for a tighter onboarding experience.
+            bounces={false}
+            overScrollMode="never"
+            // Reduce "coasting" between pages for snappier paging.
+            disableIntervalMomentum
+            decelerationRate="fast"
+            /**
+             * getItemLayout helps FlatList calculate offsets without measuring items.
+             * Improves performance and makes scrollToOffset more reliable.
+             */
+            getItemLayout={(_, index) => ({
+              length: SCREEN_WIDTH,
+              offset: SCREEN_WIDTH * index,
+              index,
+            })}
+            /**
+             * When swipe motion finishes, compute the snapped-to page index
+             * and persist it for the auto-advance timer.
+             */
+            onMomentumScrollEnd={(event) => {
+              const index = Math.round(
+                event.nativeEvent.contentOffset.x / SCREEN_WIDTH
+              );
+              currentIndexRef.current = index;
+            }}
+          />
+
+          {/* ======================================================
+             PAGINATION
+             - Static dots rendered in a row
+             - Active indicator animates across dots based on scrollX
+             ====================================================== */}
+          <View
+            style={[
+              styles.pagination,
+              {
+                // Explicit width keeps dots truly centered.
+                width:
+                  slides.length * DOT_SIZE + (slides.length - 1) * DOT_GAP,
+              },
+            ]}
+          >
+            {/* Inactive dots */}
+            {slides.map((slide, index) => (
+              <View
+                key={slide.key}
+                style={[
+                  styles.dot,
+                  // Apply right margin except on the final dot.
+                  { marginRight: index === slides.length - 1 ? 0 : DOT_GAP },
+                ]}
+              />
+            ))}
+
+            {/* Active indicator (moves in DOT_STEP increments as you scroll pages) */}
+            <Animated.View
+              style={[
+                styles.dotActive,
+                {
+                  transform: [
+                    {
+                      translateX: scrollX.interpolate({
+                        inputRange: [0, (slides.length - 1) * SCREEN_WIDTH],
+                        outputRange: [0, (slides.length - 1) * DOT_STEP],
+                        extrapolate: "clamp",
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* ======================================================
+           BOTTOM CTA SECTION
+           - Primary: Sign Up
+           - Secondary: Sign In
+           ====================================================== */}
+        <View style={styles.bottomSection}>
+          {/* Primary CTA navigates to signup */}
+          <Pressable
+            style={styles.ctaButton}
+            onPress={() => router.push("/signup")}
+            accessibilityRole="button"
+          >
+            <Text style={styles.ctaText}>Get Started for Free</Text>
+          </Pressable>
+
+          {/* Secondary CTA navigates to login */}
+          <TouchableOpacity
+            style={styles.secondarySignIn}
+            onPress={() => router.push("/login")}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+          >
+            <Text style={styles.secondarySignInText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
 }
 
+/**
+ * ==========================================================
+ * STYLES
+ * ==========================================================
+ * Organized by:
+ * - layout containers (safeArea, root, header, contentSection, bottomSection)
+ * - slide typography (slide, slideTitle, slideDescription)
+ * - pagination (pagination, dot, dotActive)
+ * - CTAs (ctaButton, ctaText, secondarySignIn, secondarySignInText)
+ */
 const styles = StyleSheet.create({
-    safeArea: {
-        alignContent: "center",
-        paddingTop: 45,
-        flex: 1,
-        backgroundColor: "#FFFFFF",
-    },
+  // Top-level SafeArea container.
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
 
-    bottomSection: {
-        paddingTop: 16,
-        paddingBottom: 12,
-    },
+  // Main page container inside the safe area.
+  root: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
 
-    contentSection: {
-        flex: 1,
-        justifyContent: "center",
-    },
+  // Header container (brand row).
+  header: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    marginBottom: 14,
+    marginTop: 0,
+  },
 
-    /**
-     * root defines the page background and vertical spacing.
-     */
-    root: {
-        flex: 1,
-        backgroundColor: "#FFFFFF",
-        paddingTop: 8,
-        paddingBottom: 24,
-    },
+  // Brand row: icon + app name.
+  brand: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
 
-    /**
-     * Header row: optional branding and top-right actions.
-     */
-    header: {
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 24,
-        marginBottom: 14,
-    },
+  // Brand icon sizing.
+  brandIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+  },
 
-    brand: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 10,
-    },
+  // Brand text styling.
+  logoText: {
+    color: "#101828",
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+  },
 
-    brandIcon: {
-        width: 34,
-        height: 34,
-        borderRadius: 8,
-    },
+  // Carousel + pagination section: takes remaining vertical space.
+  contentSection: {
+    flex: 1,
+    justifyContent: "center",
+  },
 
-    logoText: {
-        color: "#101828",
-        fontSize: 26,
-        fontWeight: "800",
-        letterSpacing: -0.3,
-    },
+  // Bottom CTA section spacing.
+  bottomSection: {
+    paddingBottom: 12,
+  },
 
-    // Container for "Skip" / "Sign In" header actions (currently unused)
-    headerActions: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
+  // Slide container: full device width so paging snaps correctly.
+  slide: {
+    width: SCREEN_WIDTH,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 20,
+  },
 
-    skipText: {
-        color: "#475467",
-        fontSize: 14,
-        fontWeight: "600",
-    },
+  // Slide title typography.
+  slideTitle: {
+    color: "#111827",
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 12,
+    letterSpacing: -0.4,
+  },
 
-    // Outlined button style for sign-in (header)
-    signInButton: {
-        borderWidth: 1,
-        borderColor: "#D0D5DD",
-        borderRadius: 999,
-        paddingVertical: 8,
-        paddingHorizontal: 14,
-        backgroundColor: "#FFFFFF",
-    },
+  // Slide description typography.
+  slideDescription: {
+    color: "#475467",
+    fontSize: 17,
+    lineHeight: 25,
+    textAlign: "center",
+    maxWidth: 320,
+  },
 
-    signInText: {
-        color: "#1D2939",
-        fontSize: 14,
-        fontWeight: "700",
-    },
+  // Pagination container: dots row centered beneath slides.
+  pagination: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    position: "relative",
+    marginTop: 28,
+    marginBottom: 30,
+  },
 
-    /**
-     * Each slide occupies full width and centers content.
-     * paddingBottom gives spacing away from pagination area.
-     */
-    slide: {
-        width: SCREEN_WIDTH,
-        paddingHorizontal: 28,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingBottom: 20,
-    },
+  // Inactive dot appearance.
+  dot: {
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: 999,
+    backgroundColor: "#D0D5DD",
+  },
 
-    /**
-     * Placeholder styling for a future icon/illustration block.
-     */
-    iconPlaceholder: {
-        width: 96,
-        height: 96,
-        borderRadius: 24,
-        backgroundColor: "#EEF4FF",
-        borderWidth: 1,
-        borderColor: "#DDE6FF",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 24,
-    },
+  // Active dot indicator (currently same width as DOT_SIZE).
+  // left recenters the indicator over each dot position.
+  dotActive: {
+    position: "absolute",
+    left: -(ACTIVE_DOT_WIDTH - DOT_SIZE) / 2,
+    width: ACTIVE_DOT_WIDTH,
+    height: DOT_SIZE,
+    borderRadius: 999,
+    backgroundColor: "#1D4ED8",
+  },
 
-    iconText: {
-        color: "#1D4ED8",
-        fontSize: 28,
-        fontWeight: "800",
-        letterSpacing: 0.5,
-    },
+  // Primary CTA button styling.
+  ctaButton: {
+    marginHorizontal: 25,
+    height: 56,
+    borderRadius: 40,
+    backgroundColor: "#1D4ED8",
+    alignItems: "center",
+    justifyContent: "center",
 
-    slideTitle: {
-        color: "#111827",
-        fontSize: 30,
-        lineHeight: 36,
-        fontWeight: "800",
-        textAlign: "center",
-        marginBottom: 12,
-        letterSpacing: -0.4,
-    },
+    // iOS shadow.
+    shadowColor: "#1D4ED8",
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
 
-    slideDescription: {
-        color: "#475467",
-        fontSize: 17,
-        lineHeight: 25,
-        textAlign: "center",
-        maxWidth: 320, // keeps text from becoming too wide on tablets
-    },
+    // Android shadow.
+    elevation: 3,
+  },
 
-    /**
-     * Pagination container is centered and relative so the active pill
-     * can be absolutely positioned on top.
-     */
-    pagination: {
-        flexDirection: "row",
-        alignItems: "center",
-        alignSelf: "center",
-        position: "relative",
-        marginTop: 28,
-        marginBottom: 30,
-    },
+  // CTA label styling.
+  ctaText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
+  },
 
-    // Inactive dots
-    dot: {
-        width: 8,
-        height: 8,
-        borderRadius: 999,
-        backgroundColor: "#D0D5DD",
-    },
+  // Secondary action spacing and touch target.
+  secondarySignIn: {
+    alignSelf: "center",
+    marginTop: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
 
-    /**
-     * Active dot pill:
-     * left offset recenters the wider pill over the dot location.
-     * translateX animation moves it across dot positions.
-     */
-    dotActive: {
-        position: "absolute",
-        left: -(ACTIVE_DOT_WIDTH - DOT_SIZE) / 2,
-        width: ACTIVE_DOT_WIDTH,
-        height: DOT_SIZE,
-        borderRadius: 999,
-        backgroundColor: "#1D4ED8",
-    },
-
-    /**
-     * Primary CTA button
-     */
-    ctaButton: {
-        marginHorizontal: 25,
-        height: 56,
-        borderRadius: 40,
-        backgroundColor: "#1D4ED8",
-        alignItems: "center",
-        justifyContent: "center",
-        shadowColor: "#1D4ED8",
-        shadowOpacity: 0.24,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
-        elevation: 3, // Android shadow
-    },
-
-    ctaText: {
-        color: "#FFFFFF",
-        fontSize: 18,
-        fontWeight: "800",
-    },
-
-    /**
-     * Secondary sign-in link under CTA.
-     * TouchableOpacity gives built-in pressed opacity feedback.
-     */
-    secondarySignIn: {
-        alignSelf: "center",
-        marginTop: 16,
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-    },
-
-    secondarySignInText: {
-        color: "#344054",
-        fontSize: 16,
-        fontWeight: "600",
-    },
+  // Secondary action label.
+  secondarySignInText: {
+    color: "#344054",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 });
