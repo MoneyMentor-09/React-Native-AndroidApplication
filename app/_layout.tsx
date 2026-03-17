@@ -103,8 +103,6 @@ export default function RootLayout() {
           options={{ title: "Profile" }}
         />
       </Stack>
-
-      </Stack>
-    </SafeAreaProvider>
+      </SafeAreaProvider>
   );
 }
