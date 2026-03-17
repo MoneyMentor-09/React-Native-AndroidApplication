@@ -60,17 +60,6 @@ type SidebarRoute = {
   path: "/dashboard" | "/transactions" | "/budget" | "/alerts" | "/chat";
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-// path      → route path used for navigation
-// label     → text shown in the sidebar
-// icon      → icon name from Ionicons.glyphMap
-// iconColor → icon color for visual distinction between items
-//
-// Restricting paths prevents accidental navigation to invalid routes.
-type SidebarRoute = {
-  path: "/profile" | "/accessibility" | "/about-us" | "/login";
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  iconColor: string;
 };
 
 // Sidebar routes
@@ -86,33 +75,6 @@ const SIDEBAR_ROUTES: SidebarRoute[] = [
   { path: "/budget", label: "Budget", icon: "wallet-outline" },
   { path: "/alerts", label: "Alerts", icon: "alert-circle-outline" },
   { path: "/chat", label: "Chat", icon: "chatbox-outline" },
-// This sidebar now acts as a profile / settings drawer opened from
-// the top-right profile icon in the header.
-const SIDEBAR_ROUTES: SidebarRoute[] = [
-  {
-    path: "/profile",
-    label: "Profile",
-    icon: "person-outline",
-    iconColor: "#2563EB",
-  },
-  {
-    path: "/accessibility",
-    label: "Accessibility",
-    icon: "settings-outline",
-    iconColor: "#9333EA",
-  },
-  {
-    path: "/about-us",
-    label: "About Us",
-    icon: "information-circle-outline",
-    iconColor: "#16A34A",
-  },
-  {
-    path: "/login",
-    label: "Logout",
-    icon: "log-out-outline",
-    iconColor: "#DC2626",
-  },
 ];
 
 // Header titles map
@@ -236,7 +198,6 @@ export default function TabsLayout() {
    * 0 → +280
    *
    * This creates a **push drawer effect** rather than overlay.
-   * This creates a push drawer effect rather than overlay.
    */
   const contentTranslateX = slideAnim.interpolate({
     inputRange: [-SIDEBAR_WIDTH, 0],
@@ -286,30 +247,12 @@ export default function TabsLayout() {
           {
             width: SIDEBAR_WIDTH,
             paddingTop: insets.top + 24,
-            paddingTop: insets.top + 20,
             transform: [{ translateX: slideAnim }],
           },
         ]}
       >
         {/* Sidebar header */}
         <Text style={styles.sidebarTitle}>Menu</Text>
-        <View style={styles.sidebarHeader}>
-          <View style={styles.sidebarBrandRow}>
-            <View style={styles.brandBadge}>
-              <Text style={styles.brandBadgeText}>MM</Text>
-            </View>
-            <Text style={styles.sidebarTitle}>{currentTitle}</Text>
-          </View>
-
-          <Pressable
-            style={styles.closeBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Close menu"
-            onPress={closeSidebar}
-          >
-            <Ionicons name="close" size={30} color="#374151" />
-          </Pressable>
-        </View>
 
         {/* Render sidebar menu items */}
         {SIDEBAR_ROUTES.map((route) => (
@@ -319,7 +262,6 @@ export default function TabsLayout() {
             onPress={() => openRouteFromSidebar(route.path)}
           >
             <Ionicons name={route.icon} size={20} color="#111827" />
-            <Ionicons name={route.icon} size={28} color={route.iconColor} />
             <Text style={styles.menuItemText}>{route.label}</Text>
           </Pressable>
         ))}
@@ -361,9 +303,6 @@ export default function TabsLayout() {
              * headerLeft
              * ----------
              * Settings/menu button that opens the sidebar.
-             * Existing settings/menu button on the left side of the header.
-             * This stays in place and can still be used for future settings logic
-             * or other features if desired.
              */
             headerLeft: () => (
               <Pressable
@@ -371,7 +310,6 @@ export default function TabsLayout() {
                 accessibilityRole="button"
                 accessibilityLabel="Open menu"
                 onPress={openSidebar}
-                accessibilityLabel="Open settings"
               >
                 <Ionicons name="settings-outline" size={24} color="#111827" />
               </Pressable>
@@ -391,17 +329,6 @@ export default function TabsLayout() {
                 accessibilityLabel="Go to Profile"
               >
                 <Ionicons name="person-circle-outline" size={28} color="#111827" />
-             * Profile button that opens the sidebar drawer.
-             * This replaces the old 3-line style trigger.
-             */
-            headerRight: () => (
-              <Pressable
-                style={styles.iconBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Open profile menu"
-                onPress={openSidebar}
-              >
-                <Ionicons name="person-outline" size={24} color="#475569" />
               </Pressable>
             ),
 
@@ -528,7 +455,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 19,
-    backgroundColor: "#F8FAFC",
     borderRightWidth: 1,
     borderRightColor: "#E5E7EB",
   },
@@ -546,43 +472,6 @@ const styles = StyleSheet.create({
   contentScrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#111827",
-  },
-
-  sidebarHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#D1D5DB",
-    backgroundColor: "#F8FAFC",
-  },
-
-  sidebarBrandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-
-  brandBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  brandBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-
-  closeBtn: {
-    padding: 6,
-    borderRadius: 12,
   },
 
   sidebarTitle: {
@@ -603,19 +492,5 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: "#111827",
     fontWeight: "600",
-  },
-});
-    gap: 18,
-    paddingHorizontal: 24,
-    paddingVertical: 26,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-    backgroundColor: "#F8FAFC",
-  },
-
-  menuItemText: {
-    fontSize: 18,
-    color: "#111827",
-    fontWeight: "500",
   },
 });

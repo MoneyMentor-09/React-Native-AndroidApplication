@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useNavigation } from '@react-navigation/native';
 import { createTransaction } from "../lib/transactions";
 import { router } from "expo-router/build/exports";
 
@@ -35,6 +36,8 @@ export default function ManualTransactionScreen() {
   const [date, setDate] = useState(new Date());
   const [showDate, setShowDate] = useState(false);  
 
+  const navigation = useNavigation();
+
   // Amount validation
   function handleAmountChange(text: string) {
     const regex = /^\d*(\.\d{0,2})?$/;
@@ -47,7 +50,7 @@ export default function ManualTransactionScreen() {
       return;
     }
 
-    let value = Number.parseFloat(amount);
+    let value = parseFloat(amount);
     if (type === "expense") value = -Math.abs(value);
     else value = Math.abs(value);
 

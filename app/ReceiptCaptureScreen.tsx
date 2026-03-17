@@ -177,19 +177,19 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
         />
       ) : (
         <FlatList
-          data={transactions}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.listContent, transactions.length === 0 && styles.emptyList]}
-          ListEmptyComponent={<Text style={styles.emptyText}>No transactions yet.</Text>}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.vendor}>{item.description}</Text>
-                <Text style={styles.amount}>{formatCurrency(item.amount)}</Text>
+            data={transactions}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={[styles.listContent, transactions.length === 0 && styles.emptyList]}
+            ListEmptyComponent={<Text style={styles.emptyText}>No transactions yet.</Text>}
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.vendor}>{item.description}</Text>
+                  <Text style={styles.amount}>{formatCurrency(item.amount)}</Text>
+                </View>
+                <Text style={styles.metaText}>Date: {item.date}</Text>
+                <Text style={styles.metaText}>Category: {item.category ?? "Uncategorized"}</Text>
               </View>
-              <Text style={styles.metaText}>Date: {item.date}</Text>
-              <Text style={styles.metaText}>Category: {item.category ?? "Uncategorized"}</Text>
-            </View>
           )}
         />
       )}
@@ -205,26 +205,144 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f1f5f9" },
-  header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  title: { fontSize: 28, fontWeight: "800", color: "#0f172a" },
-  subtitle: { marginTop: 2, fontSize: 16, color: "#334155" },
-  topActions: { paddingHorizontal: 16, paddingBottom: 10, flexDirection: "row", gap: 10 },
-  primaryButton: { flex: 1, backgroundColor: "#0f766e", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
-  primaryButtonText: { color: "#fff", fontWeight: "700" },
-  secondaryButton: { flex: 1, backgroundColor: "#e2e8f0", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
-  secondaryButtonText: { color: "#0f172a", fontWeight: "700" },
-  disabledButton: { opacity: 0.6 },
-  loadingBanner: { marginHorizontal: 16, marginBottom: 10, backgroundColor: "#ccfbf1", borderRadius: 10, padding: 10, flexDirection: "row", alignItems: "center", gap: 10 },
-  loadingText: { color: "#0f172a" },
-  errorText: { marginHorizontal: 16, marginBottom: 8, color: "#b91c1c", fontWeight: "600" },
-  centerState: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
-  listContent: { padding: 16, gap: 10 },
-  emptyList: { flexGrow: 1, justifyContent: "center" },
-  emptyText: { textAlign: "center", color: "#475569" },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#e2e8f0", gap: 4 },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  vendor: { color: "#0f172a", fontWeight: "700", fontSize: 16, flex: 1, marginRight: 8 },
-  amount: { color: "#115e59", fontWeight: "700", fontSize: 16 },
-  metaText: { color: "#334155" }
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+  },
+
+  header: {
+    marginTop: 16,
+    marginBottom: 16,
+    alignItems: "center",
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  subtitle: {
+    marginTop: 8,
+    fontSize: 16,
+    color: "#6B7280",
+    textAlign: "center",
+  },
+
+  topActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+
+  primaryButton: {
+    flex: 1,
+    backgroundColor: "#2563EB",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  secondaryButton: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  secondaryButtonText: {
+    color: "#2563EB",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  disabledButton: {
+    opacity: 0.6,
+  },
+
+  loadingBanner: {
+    marginBottom: 12,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  loadingText: {
+    color: "#111827",
+    fontWeight: "500",
+  },
+
+  errorText: {
+    marginBottom: 12,
+    color: "#DC2626",
+    fontWeight: "600",
+  },
+
+  centerState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  listContent: {
+    paddingVertical: 12,
+    gap: 12,
+  },
+
+  emptyList: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+
+  emptyText: {
+    textAlign: "center",
+    color: "#6B7280",
+    fontSize: 16,
+  },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    gap: 6,
+  },
+
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  vendor: {
+    color: "#111827",
+    fontWeight: "600",
+    fontSize: 16,
+    flex: 1,
+    marginRight: 8,
+  },
+
+  amount: {
+    color: "#16A34A",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  metaText: {
+    color: "#6B7280",
+    fontSize: 14,
+  },
 });
