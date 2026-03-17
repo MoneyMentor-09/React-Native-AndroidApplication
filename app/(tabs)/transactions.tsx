@@ -36,7 +36,7 @@ const CATEGORIES = [
 "Other"
 ];
 
-export default function transactionsScreen(){
+export default function TransactionsScreen(){
 
   type Transaction = {
   id: string;
@@ -51,7 +51,7 @@ export default function transactionsScreen(){
 const [transactions,setTransactions] = useState([ ] as Transaction[]);
 const [search,setSearch] = useState("");
 const [filterType,setFilterType] = useState("all");
-const [filterCategory,setFilterCategory] = useState("all");
+const [filterCategory] = useState("all");
 const [selectedTransactions,setSelectedTransactions] = useState<string[]>([]);
 const [editModalVisible,setEditModalVisible] = useState(false);
 const [editingTransaction,setEditingTransaction] = useState<Transaction | null>(null);
@@ -142,7 +142,7 @@ try{
 
 const supabase = getSupabaseBrowserClient();
 
-let value = parseFloat(editAmount);
+let value = Number.parseFloat(editAmount);
 
 if(editType === "expense"){
 value = -Math.abs(value);
@@ -229,7 +229,6 @@ style:"destructive",
 onPress: async () => {
 
 try{
-
 const supabase = getSupabaseBrowserClient();
 
 await supabase
@@ -252,22 +251,7 @@ console.log(err);
 
 };
 
-{selectedTransactions.length > 0 && (
 
-<View style={styles.multiDeleteContainer}>
-
-<Pressable
-style={styles.deleteSelectedButton}
-onPress={deleteSelectedTransactions}
->
-<Text style={{color:"#fff",fontWeight:"700"}}>
-Delete Selected ({selectedTransactions.length})
-</Text>
-</Pressable>
-
-</View>
-
-)}
 
 const renderTransaction = ({ item }: { item: Transaction }) => {
 
