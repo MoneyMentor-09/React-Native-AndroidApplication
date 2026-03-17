@@ -60,7 +60,7 @@ export function ExpenseForm({
           onChangeText={(vendor) => setLocalDraft((prev) => ({ ...prev, vendor }))}
           style={styles.input}
           placeholder="Store or merchant name"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#98A2B3"
         />
       </View>
 
@@ -71,7 +71,7 @@ export function ExpenseForm({
           onChangeText={(expenseDate) => setLocalDraft((prev) => ({ ...prev, expenseDate }))}
           style={styles.input}
           placeholder="2026-02-24"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#98A2B3"
           autoCapitalize="none"
         />
       </View>
@@ -83,7 +83,7 @@ export function ExpenseForm({
           onChangeText={(amount) => setLocalDraft((prev) => ({ ...prev, amount }))}
           style={styles.input}
           placeholder="0.00"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#98A2B3"
           keyboardType="decimal-pad"
         />
       </View>
@@ -96,7 +96,7 @@ export function ExpenseForm({
           style={[styles.input, styles.multiLineInput]}
           multiline
           placeholder="Category, payment method, or notes..."
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#98A2B3"
         />
       </View>
 
@@ -138,44 +138,44 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#0f172a"
+    color: "#111827"
   },
   subtitle: {
-    color: "#334155",
+    color: "#667085",
     marginBottom: 8
   },
   fieldWrap: {
     gap: 6
   },
   label: {
-    color: "#0f172a",
+    color: "#111827",
     fontWeight: "600"
   },
   input: {
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#D0D5DD",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: "#ffffff",
-    color: "#0f172a"
+    backgroundColor: "#FFFFFF",
+    color: "#111827"
   },
   multiLineInput: {
     minHeight: 90,
     textAlignVertical: "top"
   },
   ocrBlock: {
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "#F3F4F6",
     borderRadius: 10,
     padding: 10,
     maxHeight: 170
   },
   ocrText: {
-    color: "#334155",
+    color: "#667085",
     lineHeight: 18
   },
   errorText: {
-    color: "#b91c1c",
+    color: "#DC2626",
     fontWeight: "600"
   },
   actions: {
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: "#0f766e",
+    backgroundColor: "#2563EB",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center"
@@ -196,13 +196,13 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "#E5E7EB",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center"
   },
   secondaryButtonText: {
-    color: "#0f172a",
+    color: "#111827",
     fontWeight: "700"
   },
   disabledButton: {

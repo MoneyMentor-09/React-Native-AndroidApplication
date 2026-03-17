@@ -2,13 +2,15 @@
 // -----------------
 // Stack is the top-level navigator used to define the app's screen hierarchy.
 // Each <Stack.Screen /> represents a route that can be pushed onto the navigation stack.
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 
 // StatusBar
 // ---------
 // Controls the appearance of the device status bar.
 // Here it is configured with dark content over a transparent background.
 import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
+import { Pressable, Text, View } from "react-native";
 
 // SafeAreaProvider
 // ----------------
@@ -30,10 +32,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
  * for all screens nested under the app directory.
  */
 export default function RootLayout() {
+  const router = useRouter();
+
   return (
     // Makes safe area context available to all child screens and layouts.
     <SafeAreaProvider>
-      {/*
+      {/* 
         Status bar configuration:
         - style="dark" makes status bar icons/text dark
         - translucent allows content to appear behind the status bar
@@ -41,11 +45,29 @@ export default function RootLayout() {
       */}
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
-      {/*
+      {/* 
         Root stack navigator for the app.
         Screens listed here become part of the top-level navigation flow.
       */}
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerBackTitle: "Back",
+          headerLeft: ({ canGoBack }) =>
+            canGoBack ? (
+              <Pressable
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="arrow-back" size={20} color="#2563EB" />
+                  <Text style={{ color: "#2563EB", fontSize: 16, fontWeight: "600" }}>Back</Text>
+                </View>
+              </Pressable>
+            ) : null
+        }}
+      >
         {/* Landing / home entry screen */}
         <Stack.Screen name="index" options={{ headerShown: false }} />
 
@@ -55,23 +77,14 @@ export default function RootLayout() {
         {/* Signup screen with header hidden for a custom full-screen auth layout */}
         <Stack.Screen name="signup" options={{ headerShown: false }} />
 
-        {/*
+        {/* 
           Tabs group:
           This points to the nested tab navigator inside the (tabs) folder.
-          headerShown is false because the tab layout manages its own headers.
+          headerShown is false because the tab layout likely manages its own headers.
         */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-        {/* Profile settings page */}
-        <Stack.Screen name="profile" options={{ headerShown: false }} />
-
-        {/* Accessibility settings page */}
-        <Stack.Screen name="accessibility" options={{ headerShown: false }} />
-
-        {/* About us page */}
-        <Stack.Screen name="about-us" options={{ headerShown: false }} />
-
-        {/*
+        {/* 
           Receipt capture screen:
           Uses the default stack header, but overrides the title shown in the header bar.
         */}
@@ -79,7 +92,21 @@ export default function RootLayout() {
           name="ReceiptCaptureScreen"
           options={{ title: "Receipt Capture" }}
         />
+            {/* 
+          Receipt capture screen:
+          Uses the default stack header, but overrides the title shown in the header bar.
+        */}
+        <Stack.Screen
+          name="ManualTransactionScreen"
+          options={{ title: "Manual Transaction" }}
+        />
+
+        <Stack.Screen
+          name="profile"
+          options={{ title: "Profile" }}
+        />
       </Stack>
+
     </SafeAreaProvider>
   );
 }

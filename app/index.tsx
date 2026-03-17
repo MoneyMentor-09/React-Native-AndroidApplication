@@ -27,20 +27,46 @@ import {
     useWindowDimensions,
     View,
 } from "react-native";
+
+// SafeAreaView prevents content from overlapping device notch/status bar.
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// Expo Router API for navigation between screens in an Expo Router project.
+// router.push("/signup") pushes a new route onto the stack.
 import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ScreenOrientation from "expo-screen-orientation";
 
-// Get the full screen width so each onboarding slide can take up one full page.
+/**
+ * SCREEN_WIDTH
+ * ------------
+ * Read the device width once. Each onboarding slide is exactly this width,
+ * so `pagingEnabled` snaps perfectly slide-by-slide.
+ */
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Constants used for the pagination dots under the carousel.
+/**
+ * Pagination geometry constants
+ * -----------------------------
+ * DOT_SIZE: diameter of each inactive dot
+ * DOT_GAP: spacing between dots
+ * DOT_STEP: the distance the active indicator moves per slide (dot + gap)
+ * ACTIVE_DOT_WIDTH: active indicator width (set equal to DOT_SIZE here)
+ *
+ * Note: If you want a "pill" indicator, set ACTIVE_DOT_WIDTH > DOT_SIZE.
+ */
 const DOT_SIZE = 7;
 const DOT_GAP = 12;
 const DOT_STEP = DOT_SIZE + DOT_GAP;
+const ACTIVE_DOT_WIDTH = DOT_SIZE;
 
-// Type definition for each onboarding feature card.
+/**
+ * FeatureSlide type
+ * -----------------
+ * Defines the shape of each slide item rendered by the FlatList.
+ * - key: unique identifier (used by keyExtractor)
+ * - title/description: visible text content
+ */
 type FeatureSlide = {
     key: string;
     title: string;
@@ -425,7 +451,16 @@ export default function InitialScreen() {
     );
 }
 
-// Styles for the landing page screen.
+/**
+ * ==========================================================
+ * STYLES
+ * ==========================================================
+ * Organized by:
+ * - layout containers (safeArea, root, header, contentSection, bottomSection)
+ * - slide typography (slide, slideTitle, slideDescription)
+ * - pagination (pagination, dot, dotActive)
+ * - CTAs (ctaButton, ctaText, secondarySignIn, secondarySignInText)
+ */
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
