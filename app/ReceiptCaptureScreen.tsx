@@ -156,8 +156,8 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
 
       {ocrLoading ? (
         <View style={styles.loadingBanner}>
-          <ActivityIndicator color="#0f766e" />
-          <Text style={styles.loadingText}>Running OCR...</Text>
+          <ActivityIndicator color="#2563EB" />
+          <Text style={styles.loadingBannerText}>Running OCR...</Text>
         </View>
       ) : null}
 
@@ -165,7 +165,7 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
 
       {loading ? (
         <View style={styles.centerState}>
-          <ActivityIndicator size="large" color="#0f766e" />
+          <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading transactions...</Text>
         </View>
       ) : draft ? (
@@ -205,26 +205,27 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f1f5f9" },
+  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
   header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  title: { fontSize: 28, fontWeight: "800", color: "#0f172a" },
-  subtitle: { marginTop: 2, fontSize: 16, color: "#334155" },
+  title: { fontSize: 28, fontWeight: "800", color: "#111827" },
+  subtitle: { marginTop: 2, fontSize: 16, color: "#667085" },
   topActions: { paddingHorizontal: 16, paddingBottom: 10, flexDirection: "row", gap: 10 },
-  primaryButton: { flex: 1, backgroundColor: "#0f766e", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
+  primaryButton: { flex: 1, backgroundColor: "#2563EB", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
   primaryButtonText: { color: "#fff", fontWeight: "700" },
-  secondaryButton: { flex: 1, backgroundColor: "#e2e8f0", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
-  secondaryButtonText: { color: "#0f172a", fontWeight: "700" },
+  secondaryButton: { flex: 1, backgroundColor: "#E5E7EB", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
+  secondaryButtonText: { color: "#111827", fontWeight: "700" },
   disabledButton: { opacity: 0.6 },
-  loadingBanner: { marginHorizontal: 16, marginBottom: 10, backgroundColor: "#ccfbf1", borderRadius: 10, padding: 10, flexDirection: "row", alignItems: "center", gap: 10 },
-  loadingText: { color: "#0f172a" },
-  errorText: { marginHorizontal: 16, marginBottom: 8, color: "#b91c1c", fontWeight: "600" },
+  loadingBanner: { marginHorizontal: 16, marginBottom: 10, backgroundColor: "#DBEAFE", borderRadius: 10, padding: 10, flexDirection: "row", alignItems: "center", gap: 10 },
+  loadingBannerText: { color: "#1D4ED8", fontWeight: "600" },
+  loadingText: { color: "#667085" },
+  errorText: { marginHorizontal: 16, marginBottom: 8, color: "#DC2626", fontWeight: "600" },
   centerState: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
   listContent: { padding: 16, gap: 10 },
   emptyList: { flexGrow: 1, justifyContent: "center" },
-  emptyText: { textAlign: "center", color: "#475569" },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#e2e8f0", gap: 4 },
+  emptyText: { textAlign: "center", color: "#6B7280" },
+  card: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#E5E7EB", gap: 4 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  vendor: { color: "#0f172a", fontWeight: "700", fontSize: 16, flex: 1, marginRight: 8 },
-  amount: { color: "#115e59", fontWeight: "700", fontSize: 16 },
-  metaText: { color: "#334155" }
+  vendor: { color: "#111827", fontWeight: "700", fontSize: 16, flex: 1, marginRight: 8 },
+  amount: { color: "#2563EB", fontWeight: "700", fontSize: 16 },
+  metaText: { color: "#667085" }
 });

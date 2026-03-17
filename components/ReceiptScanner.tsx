@@ -7,9 +7,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ReceiptScannerProps = {
   visible: boolean;
@@ -27,6 +28,9 @@ export function ReceiptScanner({
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [capturing, setCapturing] = useState(false);
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const cameraHeight = Math.min(height * 0.68, 520);
 
   async function handleTakePhoto(): Promise<void> {
     if (!cameraRef.current || busy || capturing) {
@@ -67,9 +71,18 @@ export function ReceiptScanner({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={[
+          styles.container,
+          { paddingTop: Math.max(insets.top, 12), paddingBottom: Math.max(insets.bottom, 12) }
+        ]}
+        edges={["top", "bottom"]}
+      >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Receipt Scanner</Text>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.headerTitle}>Receipt Scanner</Text>
+            <Text style={styles.headerSubtitle}>Align the receipt within the frame</Text>
+          </View>
           <Pressable onPress={onClose} style={styles.closeButton}>
             <Text style={styles.closeButtonText}>Close</Text>
           </Pressable>
@@ -77,7 +90,7 @@ export function ReceiptScanner({
 
         {!permission ? (
           <View style={styles.centerState}>
-            <ActivityIndicator size="large" color="#0f766e" />
+            <ActivityIndicator size="large" color="#2563EB" />
             <Text style={styles.stateText}>Checking camera permission...</Text>
           </View>
         ) : null}
@@ -92,7 +105,7 @@ export function ReceiptScanner({
         ) : null}
 
         {cameraReady ? (
-          <View style={styles.cameraWrap}>
+          <View style={[styles.cameraWrap, { height: cameraHeight }]}>
             <CameraView ref={cameraRef} style={styles.camera} facing="back" />
           </View>
         ) : null}
@@ -123,30 +136,46 @@ export function ReceiptScanner({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc"
+    backgroundColor: "#FFFFFF"
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12
+    paddingTop: 6,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF"
+  },
+  headerTextWrap: {
+    flex: 1,
+    paddingRight: 12
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: "#0f172a"
+    fontWeight: "800",
+    color: "#111827"
+  },
+  headerSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#667085"
   },
   closeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6"
   },
   closeButtonText: {
-    color: "#0f766e",
+    color: "#2563EB",
     fontWeight: "600"
   },
   cameraWrap: {
-    flex: 1,
+    alignSelf: "center",
+    width: "92%",
     marginHorizontal: 16,
     borderRadius: 16,
     overflow: "hidden",
@@ -157,11 +186,12 @@ const styles = StyleSheet.create({
   },
   controls: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     gap: 10
   },
   primaryButton: {
-    backgroundColor: "#0f766e",
+    backgroundColor: "#2563EB",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center"
@@ -171,13 +201,13 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   secondaryButton: {
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "#E5E7EB",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center"
   },
   secondaryButtonText: {
-    color: "#0f172a",
+    color: "#111827",
     fontWeight: "700"
   },
   disabledButton: {
@@ -190,6 +220,6 @@ const styles = StyleSheet.create({
     gap: 12
   },
   stateText: {
-    color: "#334155"
+    color: "#667085"
   }
 });
