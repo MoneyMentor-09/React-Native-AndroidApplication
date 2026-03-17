@@ -170,7 +170,7 @@ function scoreVendorLine(line: string, index: number): number {
 
 function normalizeVendor(line: string): string {
   const cleaned = line.replace(/\s{2,}/g, " ").trim();
-  return cleaned.replace(/\s*#\d+\b/g, "").trim();
+  return cleaned.replace(/\s?#\d+\b/g, "").trim();
 }
 
 function findVendor(lines: string[]): string | undefined {
