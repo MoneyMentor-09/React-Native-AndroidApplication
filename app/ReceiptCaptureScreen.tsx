@@ -156,8 +156,8 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
 
       {ocrLoading ? (
         <View style={styles.loadingBanner}>
-          <ActivityIndicator color="#0f766e" />
-          <Text style={styles.loadingText}>Running OCR...</Text>
+          <ActivityIndicator color="#2563EB" />
+          <Text style={styles.loadingBannerText}>Running OCR...</Text>
         </View>
       ) : null}
 
@@ -165,7 +165,7 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
 
       {loading ? (
         <View style={styles.centerState}>
-          <ActivityIndicator size="large" color="#0f766e" />
+          <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading transactions...</Text>
         </View>
       ) : draft ? (
