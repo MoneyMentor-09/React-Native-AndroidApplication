@@ -28,14 +28,10 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      ["expo-router"],
-      ["expo-web-browser"],
-      ["expo-font"],
-      ["expo-screen-orientation",
-        {
-          "initialOrientation": "DEFAULT"
-        }
-      ]
+      "expo-router",
+      "expo-web-browser",
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

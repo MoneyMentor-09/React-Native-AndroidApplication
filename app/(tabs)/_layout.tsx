@@ -17,9 +17,9 @@ import { Ionicons } from "@expo/vector-icons";
 // expo-router imports
 // -------------------
 // Tabs        → creates the bottom tab navigation container
-// router      → programmatic navigation API (similar to navigation.push())
+// useRouter      → programmatic navigation API (similar to navigation.push())
 // usePathname → returns the current route path ("/dashboard", "/transactions", etc.)
-import { Tabs, router, usePathname } from "expo-router";
+import { Tabs, useRouter, usePathname } from "expo-router";
 
 // React Native imports
 // --------------------
@@ -49,49 +49,30 @@ const SIDEBAR_WIDTH = 280;
 // -----------------
 // TypeScript structure describing each sidebar item.
 //
-// path      → route path used for navigation
-// label     → text shown in the sidebar
-// icon      → icon name from Ionicons.glyphMap
-// iconColor → icon color for visual distinction between items
+// path  → route path used for navigation
+// label → text shown in the sidebar
+// icon  → icon name from Ionicons.glyphMap
 //
 // Restricting paths prevents accidental navigation to invalid routes.
 type SidebarRoute = {
-  path: "/profile" | "/accessibility" | "/about-us" | "/login";
+  path: "/dashboard" | "/transactions" | "/budget" | "/alerts" | "/chat";
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-  iconColor: string;
 };
 
 // Sidebar routes
 // --------------
 // Centralized configuration array describing all sidebar menu items.
-// This sidebar now acts as a profile / settings drawer opened from
-// the top-right profile icon in the header.
+// Benefits:
+// • avoids repeating JSX markup
+// • ensures navigation paths stay consistent
+// • makes the sidebar easily extendable
 const SIDEBAR_ROUTES: SidebarRoute[] = [
-  {
-    path: "/profile",
-    label: "Profile",
-    icon: "person-outline",
-    iconColor: "#2563EB",
-  },
-  {
-    path: "/accessibility",
-    label: "Accessibility",
-    icon: "settings-outline",
-    iconColor: "#9333EA",
-  },
-  {
-    path: "/about-us",
-    label: "About Us",
-    icon: "information-circle-outline",
-    iconColor: "#16A34A",
-  },
-  {
-    path: "/login",
-    label: "Logout",
-    icon: "log-out-outline",
-    iconColor: "#DC2626",
-  },
+  { path: "/dashboard", label: "Dashboard", icon: "grid-outline" },
+  { path: "/transactions", label: "Transactions", icon: "receipt-outline" },
+  { path: "/budget", label: "Budget", icon: "wallet-outline" },
+  { path: "/alerts", label: "Alerts", icon: "alert-circle-outline" },
+  { path: "/chat", label: "Chat", icon: "chatbox-outline" },
 ];
 
 // Header titles map
@@ -214,7 +195,7 @@ export default function TabsLayout() {
    * Content moves:
    * 0 → +280
    *
-   * This creates a push drawer effect rather than overlay.
+   * This creates a **push drawer effect** rather than overlay.
    */
   const contentTranslateX = slideAnim.interpolate({
     inputRange: [-SIDEBAR_WIDTH, 0],
@@ -236,6 +217,8 @@ export default function TabsLayout() {
     outputRange: [0, 0.08],
     extrapolate: "clamp",
   });
+
+  const router = useRouter(); // already imported
 
   /**
    * openRouteFromSidebar()
@@ -261,29 +244,13 @@ export default function TabsLayout() {
           styles.sidebar,
           {
             width: SIDEBAR_WIDTH,
-            paddingTop: insets.top + 20,
+            paddingTop: insets.top + 24,
             transform: [{ translateX: slideAnim }],
           },
         ]}
       >
         {/* Sidebar header */}
-        <View style={styles.sidebarHeader}>
-          <View style={styles.sidebarBrandRow}>
-            <View style={styles.brandBadge}>
-              <Text style={styles.brandBadgeText}>MM</Text>
-            </View>
-            <Text style={styles.sidebarTitle}>{currentTitle}</Text>
-          </View>
-
-          <Pressable
-            style={styles.closeBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Close menu"
-            onPress={closeSidebar}
-          >
-            <Ionicons name="close" size={30} color="#374151" />
-          </Pressable>
-        </View>
+        <Text style={styles.sidebarTitle}>Menu</Text>
 
         {/* Render sidebar menu items */}
         {SIDEBAR_ROUTES.map((route) => (
@@ -292,7 +259,7 @@ export default function TabsLayout() {
             style={styles.menuItem}
             onPress={() => openRouteFromSidebar(route.path)}
           >
-            <Ionicons name={route.icon} size={28} color={route.iconColor} />
+            <Ionicons name={route.icon} size={20} color="#111827" />
             <Text style={styles.menuItemText}>{route.label}</Text>
           </Pressable>
         ))}
@@ -333,15 +300,14 @@ export default function TabsLayout() {
             /**
              * headerLeft
              * ----------
-             * Existing settings/menu button on the left side of the header.
-             * This stays in place and can still be used for future settings logic
-             * or other features if desired.
+             * Settings/menu button that opens the sidebar.
              */
             headerLeft: () => (
               <Pressable
                 style={styles.iconBtn}
                 accessibilityRole="button"
-                accessibilityLabel="Open settings"
+                accessibilityLabel="Open menu"
+                onPress={openSidebar}
               >
                 <Ionicons name="settings-outline" size={24} color="#111827" />
               </Pressable>
@@ -350,17 +316,17 @@ export default function TabsLayout() {
             /**
              * headerRight
              * -----------
-             * Profile button that opens the sidebar drawer.
-             * This replaces the old 3-line style trigger.
+             * Placeholder view used to keep the title centered.
+             * Without this, the title would shift slightly left.
              */
             headerRight: () => (
               <Pressable
-                style={styles.iconBtn}
+                onPress={() => router.push("/profile")}
+                style={{ paddingRight: 16, paddingVertical: 8 }}
                 accessibilityRole="button"
-                accessibilityLabel="Open profile menu"
-                onPress={openSidebar}
+                accessibilityLabel="Go to Profile"
               >
-                <Ionicons name="person-outline" size={24} color="#475569" />
+                <Ionicons name="person-circle-outline" size={28} color="#111827" />
               </Pressable>
             ),
 
@@ -470,6 +436,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
+  headerRightPlaceholder: {
+    width: 40,
+  },
+
   iconBtn: {
     padding: 19,
     borderRadius: 12,
@@ -481,7 +451,8 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     zIndex: 10,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 19,
     borderRightWidth: 1,
     borderRightColor: "#E5E7EB",
   },
@@ -501,63 +472,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
   },
 
-  sidebarHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#D1D5DB",
-    backgroundColor: "#F8FAFC",
-  },
-
-  sidebarBrandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-
-  brandBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  brandBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-
-  closeBtn: {
-    padding: 6,
-    borderRadius: 12,
-  },
-
   sidebarTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: "#111827",
+    marginBottom: 18,
   },
 
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 18,
-    paddingHorizontal: 24,
-    paddingVertical: 26,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-    backgroundColor: "#F8FAFC",
+    gap: 12,
+    paddingVertical: 12,
   },
 
   menuItemText: {
-    fontSize: 18,
+    fontSize: 17,
     color: "#111827",
-    fontWeight: "500",
+    fontWeight: "600",
   },
 });
