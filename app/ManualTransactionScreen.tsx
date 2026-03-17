@@ -36,8 +36,6 @@ export default function ManualTransactionScreen() {
   const [date, setDate] = useState(new Date());
   const [showDate, setShowDate] = useState(false);  
 
-  const navigation = useNavigation();
-
   // Amount validation
   function handleAmountChange(text: string) {
     const regex = /^\d*(\.\d{0,2})?$/;
@@ -50,7 +48,7 @@ export default function ManualTransactionScreen() {
       return;
     }
 
-    let value = parseFloat(amount);
+    let value = Number.parseFloat(amount);
     if (type === "expense") value = -Math.abs(value);
     else value = Math.abs(value);
 
