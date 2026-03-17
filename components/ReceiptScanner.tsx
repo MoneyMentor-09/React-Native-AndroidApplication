@@ -30,7 +30,7 @@ export function ReceiptScanner({
   const [capturing, setCapturing] = useState(false);
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const cameraHeight = Math.min(height * 0.68, 520);
+  const cameraHeight = Math.min(height * 0.84, 660);
 
   async function handleTakePhoto(): Promise<void> {
     if (!cameraRef.current || busy || capturing) {
@@ -117,7 +117,7 @@ export function ReceiptScanner({
             disabled={busy || capturing}
           >
             <Text style={styles.primaryButtonText}>
-              {capturing ? "Capturing..." : busy ? "Analyzing..." : "Take Photo"}
+              {capturing ? "Scanning..." : busy ? "Analyzing..." : "Scan Receipt"}
             </Text>
           </Pressable>
           <Pressable

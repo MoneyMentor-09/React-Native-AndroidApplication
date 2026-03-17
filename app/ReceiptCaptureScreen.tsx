@@ -277,6 +277,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  loadingBannerText: {
+    color: "#2563EB",
+    fontWeight: "600",
+  },
 
   loadingText: {
     color: "#111827",
@@ -336,7 +340,7 @@ const styles = StyleSheet.create({
   },
 
   amount: {
-    color: "#16A34A",
+    color: "#DC2626",
     fontWeight: "700",
     fontSize: 16,
   },

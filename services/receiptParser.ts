@@ -175,19 +175,22 @@ function normalizeVendor(line: string): string {
 
 function findVendor(lines: string[]): string | undefined {
   const candidateLines = lines.slice(0, 12);
-  let best: { line: string; score: number } | null = null;
+  let bestLine: string | undefined;
+  let bestScore = -Infinity;
 
-  candidateLines.forEach((line, index) => {
+  for (let index = 0; index < candidateLines.length; index += 1) {
+    const line = candidateLines[index];
     const score = scoreVendorLine(line, index);
     if (score < 0) {
-      return;
+      continue;
     }
-    if (!best || score > best.score) {
-      best = { line, score };
+    if (score > bestScore) {
+      bestScore = score;
+      bestLine = line;
     }
-  });
+  }
 
-  return best ? normalizeVendor(best.line) : undefined;
+  return bestLine ? normalizeVendor(bestLine) : undefined;
 }
 
 export function parseReceiptText(rawText: string): ParsedReceipt {

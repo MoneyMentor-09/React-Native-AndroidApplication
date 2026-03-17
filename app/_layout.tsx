@@ -2,13 +2,15 @@
 // -----------------
 // Stack is the top-level navigator used to define the app's screen hierarchy.
 // Each <Stack.Screen /> represents a route that can be pushed onto the navigation stack.
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 
 // StatusBar
 // ---------
 // Controls the appearance of the device status bar.
 // Here it is configured with dark content over a transparent background.
 import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
+import { Pressable, Text, View } from "react-native";
 
 // SafeAreaProvider
 // ----------------
@@ -30,6 +32,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
  * for all screens nested under the app directory.
  */
 export default function RootLayout() {
+  const router = useRouter();
+
   return (
     // Makes safe area context available to all child screens and layouts.
     <SafeAreaProvider>
@@ -45,7 +49,25 @@ export default function RootLayout() {
         Root stack navigator for the app.
         Screens listed here become part of the top-level navigation flow.
       */}
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerBackTitle: "Back",
+          headerLeft: ({ canGoBack }) =>
+            canGoBack ? (
+              <Pressable
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="arrow-back" size={20} color="#2563EB" />
+                  <Text style={{ color: "#2563EB", fontSize: 16, fontWeight: "600" }}>Back</Text>
+                </View>
+              </Pressable>
+            ) : null
+        }}
+      >
         {/* Landing / home entry screen */}
         <Stack.Screen name="index" options={{ headerShown: false }} />
 
