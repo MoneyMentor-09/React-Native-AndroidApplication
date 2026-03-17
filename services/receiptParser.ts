@@ -73,20 +73,121 @@ function findAmount(lines: string[], rawText: string): number | undefined {
   return Math.max(...values);
 }
 
-function findVendor(lines: string[]): string | undefined {
-  for (const line of lines.slice(0, 5)) {
-    if (line.length < 2 || line.length > 50) {
-      continue;
-    }
-    if (/\d/.test(line)) {
-      continue;
-    }
-    if (/receipt|invoice|total|date|tax|cashier/i.test(line)) {
-      continue;
-    }
-    return line;
+const ADDRESS_KEYWORDS = [
+  "street",
+  "st",
+  "road",
+  "rd",
+  "avenue",
+  "ave",
+  "blvd",
+  "boulevard",
+  "drive",
+  "dr",
+  "lane",
+  "ln",
+  "highway",
+  "hwy",
+  "suite",
+  "ste",
+  "unit",
+  "floor",
+  "fl",
+  "po box"
+];
+
+function isLikelyAddress(line: string): boolean {
+  if (/\b\d{1,5}\b/.test(line) && /\b[A-Za-z]{2,}\b/.test(line)) {
+    return true;
   }
-  return undefined;
+  if (/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/.test(line)) {
+    return true;
+  }
+  const normalized = line.toLowerCase();
+  return ADDRESS_KEYWORDS.some((keyword) => new RegExp(`\\b${keyword}\\b`, "i").test(normalized));
+}
+
+function isLikelyMeta(line: string): boolean {
+  return /receipt|invoice|total|subtotal|date|tax|cashier|register|change|balance|thank|survey|code|promo|offer|coupon|owner|manager|attn|attention/i.test(
+    line
+  );
+}
+
+function isLikelyPhone(line: string): boolean {
+  return /(\+?1[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.test(line);
+}
+
+function isLikelyCityState(line: string): boolean {
+  return /\b[A-Za-z\s.'-]+,\s*[A-Z]{2}\b/.test(line);
+}
+
+function scoreVendorLine(line: string, index: number): number {
+  const trimmed = line.trim();
+  if (trimmed.endsWith(":")) {
+    return -1;
+  }
+  if (trimmed.length < 2 || trimmed.length > 50) {
+    return -1;
+  }
+  if (isLikelyMeta(trimmed) || isLikelyAddress(trimmed) || isLikelyPhone(trimmed)) {
+    return -1;
+  }
+
+  const alphaCount = (trimmed.match(/[A-Za-z]/g) || []).length;
+  const digitCount = (trimmed.match(/\d/g) || []).length;
+  if (alphaCount === 0) {
+    return -1;
+  }
+
+  let score = 0;
+  score += Math.max(0, 12 - index * 2);
+  score += Math.max(0, 12 - trimmed.length / 2);
+
+  const upperOnly = trimmed.replace(/[^A-Za-z]/g, "");
+  const isAllCaps = upperOnly.length > 0 && upperOnly === upperOnly.toUpperCase();
+  if (isAllCaps) {
+    score += 6;
+  }
+
+  if (digitCount > 0) {
+    score -= digitCount;
+  }
+
+  if (isLikelyCityState(trimmed)) {
+    score -= 8;
+  }
+
+  if (/store|location|loc\b/i.test(trimmed)) {
+    score -= 4;
+  }
+
+  if (/#\d+\b/i.test(trimmed)) {
+    score -= 2;
+  }
+
+  return score;
+}
+
+function normalizeVendor(line: string): string {
+  const cleaned = line.replace(/\s{2,}/g, " ").trim();
+  return cleaned.replace(/\s*#\d+\b/g, "").trim();
+}
+
+function findVendor(lines: string[]): string | undefined {
+  const candidateLines = lines.slice(0, 12);
+  let best: { line: string; score: number } | null = null;
+
+  candidateLines.forEach((line, index) => {
+    const score = scoreVendorLine(line, index);
+    if (score < 0) {
+      return;
+    }
+    if (!best || score > best.score) {
+      best = { line, score };
+    }
+  });
+
+  return best ? normalizeVendor(best.line) : undefined;
 }
 
 export function parseReceiptText(rawText: string): ParsedReceipt {
