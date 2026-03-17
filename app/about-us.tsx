@@ -20,7 +20,7 @@ const TEAM_MEMBERS = [
   "Amrinder Singh",
   "Samuel Sexton",
   "Chijioke William Okogwu",
-  "Nick Sikorsky",
+  "Nick Sikorski",
 ];
 
 /**
