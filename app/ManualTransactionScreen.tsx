@@ -17,7 +17,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useNavigation } from '@react-navigation/native';
 import { createTransaction } from "../lib/transactions";
 import { router } from "expo-router/build/exports";
 
