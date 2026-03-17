@@ -30,9 +30,9 @@ export default function ProfileScreen() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmText, setConfirmText] = useState("");
-  const [setProfilePicture] = useState<string | null>(null);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [isLogoutMode, setIsLogoutMode] = useState(false);
-  const [setLoggingOut] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   
 
