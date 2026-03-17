@@ -17,9 +17,9 @@ import { Ionicons } from "@expo/vector-icons";
 // expo-router imports
 // -------------------
 // Tabs        → creates the bottom tab navigation container
-// router      → programmatic navigation API (similar to navigation.push())
+// useRouter      → programmatic navigation API (similar to navigation.push())
 // usePathname → returns the current route path ("/dashboard", "/transactions", etc.)
-import { Tabs, router, usePathname } from "expo-router";
+import { Tabs, useRouter, usePathname } from "expo-router";
 
 // React Native imports
 // --------------------
@@ -28,8 +28,6 @@ import { Tabs, router, usePathname } from "expo-router";
 // StyleSheet → optimized way to define component styles
 // Text/View  → core layout and text primitives
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
-
-import { useRouter } from "expo-router";
 
 // Safe area hook
 // --------------
