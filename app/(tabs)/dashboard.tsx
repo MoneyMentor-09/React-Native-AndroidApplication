@@ -15,8 +15,9 @@ import { router } from "expo-router";
 // React hooks
 // -----------
 // useEffect -> runs side effects such as loading data on mount
+// useRef   -> stores animated values across renders
 // useState  -> stores component state like transactions, loading, refresh, and error states
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // React Native components
 // -----------------------
@@ -28,6 +29,8 @@ import { useEffect, useState } from "react";
 // Text/View         -> core UI layout and text components
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -35,6 +38,7 @@ import {
   Text,
   View,
 } from "react-native";
+import Svg, { Circle, G } from "react-native-svg";
 
 // Transaction utilities
 // ---------------------
@@ -88,7 +92,7 @@ const CHART_COLORS = ["#2563EB", "#0F766E", "#EA580C", "#7C3AED", "#DC2626"];
  * label -> user-facing text shown in the chip
  */
 const PERIOD_OPTIONS: Array<{ key: DashboardPeriod; label: string }> = [
-  { key: "week", label: "This week" },
+  // { key: "week", label: "This week" },
   { key: "month", label: "This month" },
   { key: "year", label: "This year" },
 ];
@@ -398,6 +402,103 @@ function SummaryCard({
 }
 
 /**
+ * AnimatedDonutChart Component
+ * ----------------------------
+ * Lightweight SVG-based donut chart used instead of Victory Native.
+ *
+ * Why this exists:
+ * - The older victory-native package is not compatible with the Fabric renderer
+ *   used by this Expo / React Native version.
+ * - This keeps the animated category chart stable without adding another charting dependency.
+ */
+function AnimatedDonutChart({
+  categories,
+  total,
+}: {
+  categories: DashboardMetrics["topCategories"];
+  total: number;
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const chartSize = 260;
+  const strokeWidth = 30;
+  const radius = (chartSize - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  useEffect(() => {
+    progress.setValue(0);
+
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 700,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [progress]);
+
+  let cumulativeShare = 0;
+
+  return (
+    <Animated.View
+      style={[
+        styles.pieChartWrap,
+        {
+          opacity: progress,
+          transform: [
+            {
+              scale: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.92, 1],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <Svg width={chartSize} height={chartSize} viewBox={`0 0 ${chartSize} ${chartSize}`}>
+        <G rotation={-90} origin={`${chartSize / 2}, ${chartSize / 2}`}>
+          <Circle
+            cx={chartSize / 2}
+            cy={chartSize / 2}
+            r={radius}
+            fill="none"
+            stroke="#E2E8F0"
+            strokeWidth={strokeWidth}
+          />
+
+          {categories.map((category) => {
+            const sliceLength = circumference * category.share;
+            const gapLength = Math.max(circumference - sliceLength, 0);
+            const strokeDashoffset = -circumference * cumulativeShare;
+
+            cumulativeShare += category.share;
+
+            return (
+              <Circle
+                key={category.name}
+                cx={chartSize / 2}
+                cy={chartSize / 2}
+                r={radius}
+                fill="none"
+                stroke={category.color}
+                strokeWidth={strokeWidth}
+                strokeLinecap="butt"
+                strokeDasharray={`${sliceLength} ${gapLength}`}
+                strokeDashoffset={strokeDashoffset}
+              />
+            );
+          })}
+        </G>
+      </Svg>
+
+      <View pointerEvents="none" style={styles.pieChartCenter}>
+        <Text style={styles.pieChartCenterLabel}>Total spent</Text>
+        <Text style={styles.pieChartCenterValue}>{formatCurrency(total)}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
  * DashboardScreen Component
  * -------------------------
  * Main dashboard screen.
@@ -522,10 +623,6 @@ export default function DashboardScreen() {
   // Derive dashboard-ready summary values from the raw transactions.
   const metrics = buildDashboardMetrics(transactions, selectedPeriod);
 
-  // Maximum chart bucket value, used to scale the optional trend bars.
-  // Fallback of 1 avoids divide-by-zero when every bucket total is 0.
-  const maxTrendSpend = Math.max(...metrics.spendingTrend.map((item) => item.total), 1);
-
   // Human-readable label for the currently selected period chip.
   const activePeriodLabel =
     PERIOD_OPTIONS.find((option) => option.key === selectedPeriod)?.label ?? "This month";
@@ -591,42 +688,40 @@ export default function DashboardScreen() {
       </View>
 
       {/* Category spending breakdown section */}
-      <View style={styles.section}>
+      <View style={styles.sectionGroup}>
         <Text style={styles.sectionTitle}>Spending by category</Text>
 
-        {metrics.topCategories.length > 0 ? (
-          metrics.topCategories.map((category) => (
-            <View key={category.name} style={styles.categoryRow}>
-              {/* Top row containing category name and formatted amount */}
-              <View style={styles.categoryHeader}>
-                <View style={styles.categoryNameWrap}>
-                  {/* Small color dot matching this category's progress bar */}
-                  <View style={[styles.categoryDot, { backgroundColor: category.color }]} />
-                  <Text style={styles.categoryName}>{category.name}</Text>
-                </View>
-                <Text style={styles.categoryAmount}>{formatCurrency(category.total)}</Text>
-              </View>
+        <View style={styles.section}>
+          {metrics.topCategories.length > 0 ? (
+            <>
+              <AnimatedDonutChart
+                key={`${selectedPeriod}-${metrics.topCategories.map((category) => `${category.name}:${category.total}`).join("|")}`}
+                categories={metrics.topCategories}
+                total={metrics.periodExpenseTotal}
+              />
 
-              {/* Horizontal progress bar representing share of total spend */}
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      // Minimum width of 6% keeps very small categories visible.
-                      width: `${Math.max(category.share * 100, 6)}%`,
-                      backgroundColor: category.color,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-          ))
-        ) : (
-          <Text style={styles.emptySectionText}>
-            No expense categories recorded for {activePeriodLabel.toLowerCase()}.
-          </Text>
-        )}
+              {metrics.topCategories.map((category) => (
+                <View key={category.name} style={styles.categoryRow}>
+                  {/* Top row containing category name and formatted amount */}
+                  <View style={styles.categoryHeader}>
+                    <View style={styles.categoryNameWrap}>
+                      {/* Small color dot matching this category's chart slice */}
+                      <View style={[styles.categoryDot, { backgroundColor: category.color }]} />
+                      <Text style={styles.categoryName}>{category.name}</Text>
+                    </View>
+                    <Text style={styles.categoryAmount}>{formatCurrency(category.total)}</Text>
+                  </View>
+
+                  <Text style={styles.categoryShare}>{Math.round(category.share * 100)}% of spending</Text>
+                </View>
+              ))}
+            </>
+          ) : (
+            <Text style={styles.emptySectionText}>
+              No expense categories recorded for {activePeriodLabel.toLowerCase()}.
+            </Text>
+          )}
+        </View>
       </View>
 
       {/*
@@ -661,57 +756,58 @@ export default function DashboardScreen() {
       */}
 
       {/* Recent transactions section */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent activity</Text>
+      <View style={styles.sectionGroup}>
+        <Text style={styles.sectionTitle}>Recent activity</Text>
 
-          {/* Link to full transactions screen */}
-          <Pressable onPress={() => router.push("/transactions")}>
-            <Text style={styles.linkText}>View all</Text>
-          </Pressable>
+        <View style={styles.section}>
+          {metrics.recentTransactions.length > 0 ? (
+            <View style={styles.transactionList}>
+              {metrics.recentTransactions.map((tx) => {
+                const isIncome = tx.type === "income";
+
+                // Normalize empty categories to "Other" for consistent display.
+                const categoryName = tx.category?.trim() || "Other";
+
+                return (
+                  <View key={tx.id} style={styles.transactionRow}>
+                    {/* Circular badge showing a category icon with income/expense tint */}
+                    <View
+                      style={[styles.transactionIconWrap, isIncome ? styles.incomeTint : styles.expenseTint]}
+                    >
+                      <Ionicons
+                        name={getCategoryIcon(categoryName)}
+                        size={18}
+                        color={isIncome ? "#047857" : "#B91C1C"}
+                      />
+                    </View>
+
+                    {/* Main text block for transaction description and metadata */}
+                    <View style={styles.transactionText}>
+                      <Text style={styles.transactionTitle}>{tx.description}</Text>
+                      <Text style={styles.transactionMeta}>
+                        {categoryName + " • " + tx.date}
+                      </Text>
+                    </View>
+
+                    {/* Signed amount styled according to income vs expense */}
+                    <Text style={[styles.transactionAmount, isIncome ? styles.incomeAmount : styles.expenseAmount]}>
+                      {isIncome ? "+" : "-"}
+                      {formatCurrency(Math.abs(tx.amount))}
+                    </Text>
+                  </View>
+                );
+              })}
+
+              <Pressable style={styles.transactionFooter} onPress={() => router.push("/transactions")}>
+                <Text style={styles.linkText}>View all</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={styles.emptySectionText}>
+              No transactions recorded for {activePeriodLabel.toLowerCase()}.
+            </Text>
+          )}
         </View>
-
-        {metrics.recentTransactions.length > 0 ? (
-          metrics.recentTransactions.map((tx) => {
-            const isIncome = tx.type === "income";
-
-            // Normalize empty categories to "Other" for consistent display.
-            const categoryName = tx.category?.trim() || "Other";
-
-            return (
-              <View key={tx.id} style={styles.transactionRow}>
-                {/* Circular badge showing a category icon with income/expense tint */}
-                <View
-                  style={[styles.transactionIconWrap, isIncome ? styles.incomeTint : styles.expenseTint]}
-                >
-                  <Ionicons
-                    name={getCategoryIcon(categoryName)}
-                    size={18}
-                    color={isIncome ? "#047857" : "#B91C1C"}
-                  />
-                </View>
-
-                {/* Main text block for transaction description and metadata */}
-                <View style={styles.transactionText}>
-                  <Text style={styles.transactionTitle}>{tx.description}</Text>
-                  <Text style={styles.transactionMeta}>
-                    {categoryName + " • " + tx.date}
-                  </Text>
-                </View>
-
-                {/* Signed amount styled according to income vs expense */}
-                <Text style={[styles.transactionAmount, isIncome ? styles.incomeAmount : styles.expenseAmount]}>
-                  {isIncome ? "+" : "-"}
-                  {formatCurrency(Math.abs(tx.amount))}
-                </Text>
-              </View>
-            );
-          })
-        ) : (
-          <Text style={styles.emptySectionText}>
-            No transactions recorded for {activePeriodLabel.toLowerCase()}.
-          </Text>
-        )}
       </View>
     </ScrollView>
   );
@@ -880,19 +976,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  // Groups a heading with its card container.
+  sectionGroup: {
+    gap: 10,
+  },
+
   // Generic white content card used for dashboard sections.
   section: {
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
     padding: 18,
     gap: 14,
-  },
-
-  // Header row for sections with a title and action link.
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
   },
 
   // Section title text.
@@ -909,9 +1003,51 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  // Stack for recent activity rows and the footer action.
+  transactionList: {
+    marginTop: -2,
+  },
+
   // Wrapper for each category item in the spending list.
   categoryRow: {
     gap: 10,
+    paddingTop: 2,
+  },
+
+  // Container that centers the donut chart and its overlay content.
+  pieChartWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 4,
+  },
+
+  // Center overlay that turns the pie chart into a readable dashboard donut.
+  pieChartCenter: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#FFFFFF",
+  },
+
+  // Small label inside the donut chart.
+  pieChartCenterLabel: {
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+
+  // Total amount displayed in the center of the donut chart.
+  pieChartCenterValue: {
+    color: "#0F172A",
+    fontSize: 20,
+    fontWeight: "900",
+    marginTop: 6,
+    textAlign: "center",
   },
 
   // Top row of each category item containing label and amount.
@@ -951,18 +1087,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Background track for category progress bars.
-  progressTrack: {
-    height: 10,
-    borderRadius: 999,
-    overflow: "hidden",
-    backgroundColor: "#E2E8F0",
-  },
-
-  // Filled portion of the progress bar.
-  progressFill: {
-    height: "100%",
-    borderRadius: 999,
+  // Secondary text showing the share of total category spend.
+  categoryShare: {
+    color: "#64748B",
+    fontSize: 13,
+    fontWeight: "600",
   },
 
   // Shared empty text used within dashboard sections.
@@ -1024,7 +1153,10 @@ const styles = StyleSheet.create({
   transactionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
   },
 
   // Circular icon container for recent transactions.
@@ -1069,6 +1201,12 @@ const styles = StyleSheet.create({
   transactionAmount: {
     fontSize: 15,
     fontWeight: "800",
+  },
+
+  // Footer action placed after the recent activity rows.
+  transactionFooter: {
+    paddingTop: 14,
+    alignItems: "flex-end",
   },
 
   // Amount color for income transactions.
