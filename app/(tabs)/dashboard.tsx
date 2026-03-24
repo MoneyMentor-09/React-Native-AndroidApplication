@@ -44,16 +44,17 @@ import Svg, { Circle, G } from "react-native-svg";
 // ---------------------
 // fetchTransactions retrieves saved transactions from your data layer.
 // Transaction type defines the shape of a transaction object.
+import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import { fetchTransactions, type Transaction } from "../../lib/transactions";
 
 /**
  * DashboardMetrics type
  * ---------------------
  * Defines the computed data used to render the dashboard:
- * - periodExpenseTotal: total expenses for the selected period
- * - periodIncomeTotal: total income for the selected period
+ * - periodExpenseTotal: total expenses for the selected month
+ * - periodIncomeTotal: total income for the selected month
  * - netTotal: income minus expenses
- * - topCategories: highest spending categories for the selected period
+ * - topCategories: highest spending categories for the selected month
  * - spendingTrend: grouped expense totals for chart rendering
  * - recentTransactions: most recent transactions shown in the UI
  *
@@ -70,13 +71,6 @@ type DashboardMetrics = {
 };
 
 /**
- * DashboardPeriod type
- * --------------------
- * Restricts the dashboard filter to only the supported time windows.
- */
-type DashboardPeriod = "week" | "month" | "year";
-
-/**
  * CHART_COLORS
  * ------------
  * Reusable color palette assigned to top spending categories.
@@ -85,17 +79,14 @@ type DashboardPeriod = "week" | "month" | "year";
 const CHART_COLORS = ["#2563EB", "#0F766E", "#EA580C", "#7C3AED", "#DC2626"];
 
 /**
- * PERIOD_OPTIONS
- * --------------
- * Metadata used to render the period filter chips.
- * key   -> internal state value
- * label -> user-facing text shown in the chip
+ * MONTH_OPTIONS
+ * -------------
+ * Fixed month labels used by the dashboard dropdown.
  */
-const PERIOD_OPTIONS: Array<{ key: DashboardPeriod; label: string }> = [
-  // { key: "week", label: "This week" },
-  { key: "month", label: "This month" },
-  { key: "year", label: "This year" },
-];
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, monthIndex) => ({
+  monthIndex,
+  label: new Date(2026, monthIndex, 1).toLocaleDateString("en-US", { month: "long" }),
+}));
 
 /**
  * CATEGORY_ICONS
@@ -164,55 +155,28 @@ function formatCurrency(value: number): string {
  * Converts raw transactions into dashboard-friendly summary data.
  *
  * Steps performed:
- * 1. Filters transactions into the selected period range
+ * 1. Filters transactions into the selected month range
  * 2. Separates income and expense totals
- * 3. Groups period expenses by category
+ * 3. Groups monthly expenses by category
  * 4. Builds a "top categories" list with percentage shares
- * 5. Computes chart-friendly spending trend buckets
- * 6. Selects the most recent 5 transactions in the selected period
+ * 5. Computes chart-friendly weekly buckets within that month
+ * 6. Selects the most recent 5 transactions in the selected month
  *
  * This function keeps all aggregation logic outside the render body
  * so the screen component remains easier to read and maintain.
  */
-function buildDashboardMetrics(transactions: Transaction[], period: DashboardPeriod): DashboardMetrics {
-  // Capture the current moment as the reference point for the selected period.
-  const now = new Date();
-
+function buildDashboardMetrics(
+  transactions: Transaction[],
+  selectedMonthIndex: number,
+  selectedYear: number,
+): DashboardMetrics {
   // start/end define the inclusive/exclusive time window:
   // keep transactions where start <= txDate < end
-  const start = new Date(now);
-  const end = new Date(now);
+  const start = new Date(selectedYear, selectedMonthIndex, 1);
+  start.setHours(0, 0, 0, 0);
 
-  if (period === "week") {
-    // JavaScript getDay():
-    // 0 = Sunday, 1 = Monday, ... 6 = Saturday
-    // This implementation treats Sunday as the first day of the week.
-    const dayOfWeek = now.getDay();
-
-    // Move start to the beginning of the current week at midnight.
-    start.setHours(0, 0, 0, 0);
-    start.setDate(now.getDate() - dayOfWeek);
-
-    // End is 7 days after the week start, also at midnight.
-    end.setHours(0, 0, 0, 0);
-    end.setDate(start.getDate() + 7);
-  } else if (period === "month") {
-    // Start at the first day of the current month.
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-
-    // End at the first day of the next month.
-    end.setMonth(now.getMonth() + 1, 1);
-    end.setHours(0, 0, 0, 0);
-  } else {
-    // Year view:
-    // start at January 1st of the current year
-    // end at January 1st of the next year
-    start.setMonth(0, 1);
-    start.setHours(0, 0, 0, 0);
-    end.setFullYear(now.getFullYear() + 1, 0, 1);
-    end.setHours(0, 0, 0, 0);
-  }
+  const end = new Date(selectedYear, selectedMonthIndex + 1, 1);
+  end.setHours(0, 0, 0, 0);
 
   // Keep only transactions whose dates are valid and fall within the selected range.
   const periodTransactions = transactions.filter((tx) => {
@@ -267,79 +231,32 @@ function buildDashboardMetrics(transactions: Transaction[], period: DashboardPer
   // is still generated so the screen can support that section when enabled.
   let spendingTrend: Array<{ label: string; total: number }> = [];
 
-  if (period === "week") {
-    // Build one expense bucket for each day of the current week.
-    spendingTrend = Array.from({ length: 7 }, (_, index) => {
-      const day = new Date(start);
-      day.setDate(start.getDate() + index);
+  // Approximate the selected month as 7-day weekly buckets: W1, W2, W3, etc.
+  const daysInMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
+  const weekCount = Math.ceil(daysInMonth / 7);
 
-      const nextDay = new Date(day);
-      nextDay.setDate(day.getDate() + 1);
+  spendingTrend = Array.from({ length: weekCount }, (_, index) => {
+    const weekStart = new Date(start);
+    weekStart.setDate(1 + index * 7);
 
-      // Sum only expense transactions occurring on this specific day.
-      const total = periodTransactions.reduce((sum, tx) => {
-        if (tx.type === "income") {
-          return sum;
-        }
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
 
-        const txDate = new Date(tx.date);
-        return txDate >= day && txDate < nextDay ? sum + Math.abs(tx.amount) : sum;
-      }, 0);
+    // Sum only expense transactions in this 7-day range.
+    const total = periodTransactions.reduce((sum, tx) => {
+      if (tx.type === "income") {
+        return sum;
+      }
 
-      return {
-        label: day.toLocaleDateString("en-US", { weekday: "short" }),
-        total,
-      };
-    });
-  } else if (period === "month") {
-    // Approximate the month as 7-day weekly buckets: W1, W2, W3, etc.
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const weekCount = Math.ceil(daysInMonth / 7);
+      const txDate = new Date(tx.date);
+      return txDate >= weekStart && txDate < weekEnd ? sum + Math.abs(tx.amount) : sum;
+    }, 0);
 
-    spendingTrend = Array.from({ length: weekCount }, (_, index) => {
-      const weekStart = new Date(start);
-      weekStart.setDate(1 + index * 7);
-
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 7);
-
-      // Sum only expense transactions in this 7-day range.
-      const total = periodTransactions.reduce((sum, tx) => {
-        if (tx.type === "income") {
-          return sum;
-        }
-
-        const txDate = new Date(tx.date);
-        return txDate >= weekStart && txDate < weekEnd ? sum + Math.abs(tx.amount) : sum;
-      }, 0);
-
-      return {
-        label: `W${index + 1}`,
-        total,
-      };
-    });
-  } else {
-    // Build one bucket per month for the current year.
-    spendingTrend = Array.from({ length: 12 }, (_, index) => {
-      const monthStart = new Date(now.getFullYear(), index, 1);
-      const monthEnd = new Date(now.getFullYear(), index + 1, 1);
-
-      // Sum only expense transactions in this month.
-      const total = periodTransactions.reduce((sum, tx) => {
-        if (tx.type === "income") {
-          return sum;
-        }
-
-        const txDate = new Date(tx.date);
-        return txDate >= monthStart && txDate < monthEnd ? sum + Math.abs(tx.amount) : sum;
-      }, 0);
-
-      return {
-        label: monthStart.toLocaleDateString("en-US", { month: "short" }),
-        total,
-      };
-    });
-  }
+    return {
+      label: `W${index + 1}`,
+      total,
+    };
+  });
 
   // Sort filtered transactions newest-first, then keep only the latest five
   // for the "Recent activity" section.
@@ -356,49 +273,6 @@ function buildDashboardMetrics(transactions: Transaction[], period: DashboardPer
     spendingTrend,
     recentTransactions,
   };
-}
-
-/**
- * SummaryCard Component
- * ---------------------
- * Reusable card used for summary metrics such as:
- * - Expenses
- * - Income
- *
- * Props:
- * - label: text label shown above the value
- * - value: formatted amount
- * - accent: background color of the icon circle
- * - icon: Ionicons icon name
- *
- * Keeping this as a reusable component avoids duplicated UI markup
- * for each summary card.
- */
-function SummaryCard({
-  label,
-  value,
-  accent,
-  icon,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}) {
-  return (
-    <View style={styles.summaryCard}>
-      {/* Small colored icon badge for the card */}
-      <View style={[styles.summaryIcon, { backgroundColor: accent }]}>
-        <Ionicons name={icon} size={18} color="#FFFFFF" />
-      </View>
-
-      {/* Metric label, e.g. "Expenses" or "Income" */}
-      <Text style={styles.summaryLabel}>{label}</Text>
-
-      {/* Main formatted value shown on the card */}
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
 }
 
 /**
@@ -419,10 +293,11 @@ function AnimatedDonutChart({
   total: number;
 }) {
   const progress = useRef(new Animated.Value(0)).current;
-  const chartSize = 260;
-  const strokeWidth = 30;
+  const chartSize = 248;
+  const strokeWidth = 24;
   const radius = (chartSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
+  const segmentGap = 8;
 
   useEffect(() => {
     progress.setValue(0);
@@ -466,7 +341,8 @@ function AnimatedDonutChart({
           />
 
           {categories.map((category) => {
-            const sliceLength = circumference * category.share;
+            const rawSliceLength = circumference * category.share;
+            const sliceLength = Math.max(rawSliceLength - segmentGap, 0);
             const gapLength = Math.max(circumference - sliceLength, 0);
             const strokeDashoffset = -circumference * cumulativeShare;
 
@@ -481,7 +357,7 @@ function AnimatedDonutChart({
                 fill="none"
                 stroke={category.color}
                 strokeWidth={strokeWidth}
-                strokeLinecap="butt"
+                strokeLinecap="round"
                 strokeDasharray={`${sliceLength} ${gapLength}`}
                 strokeDashoffset={strokeDashoffset}
               />
@@ -522,8 +398,17 @@ export default function DashboardScreen() {
   // Stores a human-readable load error, if one occurs.
   const [error, setError] = useState<string | null>(null);
 
-  // Controls which period filter is currently applied to dashboard metrics.
-  const [selectedPeriod, setSelectedPeriod] = useState<DashboardPeriod>("month");
+  // Name shown in the dashboard greeting.
+  const [displayName, setDisplayName] = useState("User");
+
+  // Controls which month the dashboard is currently summarizing.
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(new Date().getMonth());
+
+  // Toggles the month dropdown visibility.
+  const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
+
+  // Shared animated value for the dropdown enter/exit transition.
+  const monthMenuAnimation = useRef(new Animated.Value(0)).current;
 
   /**
    * loadTransactions
@@ -563,6 +448,30 @@ export default function DashboardScreen() {
     }
   };
 
+  const loadDisplayName = async () => {
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setDisplayName("User");
+        return;
+      }
+
+      const profileName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.first_name ||
+        user.email?.split("@")[0] ||
+        "User";
+
+      setDisplayName(profileName);
+    } catch {
+      setDisplayName("User");
+    }
+  };
+
   /**
    * Load dashboard data once when the screen first mounts.
    *
@@ -570,7 +479,17 @@ export default function DashboardScreen() {
    */
   useEffect(() => {
     void loadTransactions();
+    void loadDisplayName();
   }, []);
+
+  useEffect(() => {
+    Animated.timing(monthMenuAnimation, {
+      toValue: isMonthMenuOpen ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [isMonthMenuOpen, monthMenuAnimation]);
 
   // Loading state shown before transactions are ready.
   if (isLoading) {
@@ -620,17 +539,40 @@ export default function DashboardScreen() {
     );
   }
 
-  // Derive dashboard-ready summary values from the raw transactions.
-  const metrics = buildDashboardMetrics(transactions, selectedPeriod);
+  const selectedYear = new Date().getFullYear();
+  const selectedMonthLabel =
+    MONTH_OPTIONS.find((option) => option.monthIndex === selectedMonthIndex)?.label ??
+    MONTH_OPTIONS[new Date().getMonth()].label;
 
-  // Human-readable label for the currently selected period chip.
-  const activePeriodLabel =
-    PERIOD_OPTIONS.find((option) => option.key === selectedPeriod)?.label ?? "This month";
+  // Derive dashboard-ready summary values from the raw transactions.
+  const metrics = buildDashboardMetrics(transactions, selectedMonthIndex, selectedYear);
+  const comparisonMax = Math.max(metrics.periodExpenseTotal, metrics.periodIncomeTotal, 1);
+  const expenseBarHeight = Math.max((metrics.periodExpenseTotal / comparisonMax) * 124, metrics.periodExpenseTotal > 0 ? 28 : 10);
+  const incomeBarHeight = Math.max((metrics.periodIncomeTotal / comparisonMax) * 124, metrics.periodIncomeTotal > 0 ? 10 : 6);
+  const monthMenuAnimatedStyle = {
+    opacity: monthMenuAnimation,
+    transform: [
+      {
+        translateY: monthMenuAnimation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-10, 0],
+        }),
+      },
+      {
+        scale: monthMenuAnimation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.98, 1],
+        }),
+      },
+    ],
+  };
 
   return (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={styles.contentContainer}
+      onScrollBeginDrag={() => setIsMonthMenuOpen(false)}
+      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl
           // Shows the native refresh indicator during pull-to-refresh.
@@ -641,50 +583,136 @@ export default function DashboardScreen() {
         />
       }
     >
-      {/* Period filter chips for week / month / year */}
-      <View style={styles.periodFilterWrap}>
-        {PERIOD_OPTIONS.map((option) => {
-          const isActive = option.key === selectedPeriod;
+      {/* Dashboard header with the month selector aligned to the right. */}
+      <View style={styles.summaryHeader}>
+        <View style={styles.summaryHeaderCopy}>
+          <Text style={styles.summaryHeaderTitle}>Hello, {displayName}!</Text>
+          <Text style={styles.summaryHeaderSubtitle}>Track how your month is balancing so far.</Text>
+        </View>
 
-          return (
-            <Pressable
-              key={option.key}
-              onPress={() => setSelectedPeriod(option.key)}
-              style={[styles.periodChip, isActive && styles.periodChipActive]}
-            >
-              <Text style={[styles.periodChipText, isActive && styles.periodChipTextActive]}>
-                {option.label}
+        <View style={styles.monthMenuWrap}>
+          <Pressable
+            style={styles.monthButton}
+            onPress={() => setIsMonthMenuOpen((currentValue) => !currentValue)}
+          >
+            <Text style={styles.monthButtonText}>{selectedMonthLabel}</Text>
+            <Ionicons
+              name={isMonthMenuOpen ? "chevron-up-outline" : "chevron-down-outline"}
+              size={16}
+              color="#0F172A"
+            />
+          </Pressable>
+
+          {isMonthMenuOpen ? (
+            <Animated.View style={[styles.monthMenu, monthMenuAnimatedStyle]}>
+              {MONTH_OPTIONS.map((option) => {
+                const isActive = option.monthIndex === selectedMonthIndex;
+
+                return (
+                  <Pressable
+                    key={option.monthIndex}
+                    style={[styles.monthMenuItem, isActive && styles.monthMenuItemActive]}
+                    onPress={() => {
+                      setSelectedMonthIndex(option.monthIndex);
+                      setIsMonthMenuOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.monthMenuText, isActive && styles.monthMenuTextActive]}>
+                      {option.label}
+                    </Text>
+                    {isActive ? <Ionicons name="checkmark-outline" size={16} color="#2563EB" /> : null}
+                  </Pressable>
+                );
+              })}
+            </Animated.View>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.sectionGroup}>
+        <Text style={styles.sectionTitle}>Expenses vs Income</Text>
+
+        <View style={styles.comparisonCard}>
+          <View style={styles.comparisonHeader}>
+            <View>
+              <Text style={styles.comparisonTitle}>{selectedMonthLabel}</Text>
+              <Text style={styles.comparisonSubtitle}>A quick look at money in versus money out.</Text>
+            </View>
+
+            <View style={styles.netPill}>
+              <Text style={styles.netPillLabel}>Net</Text>
+              <Text
+                style={[
+                  styles.netPillValue,
+                  metrics.netTotal >= 0 ? styles.incomeAmount : styles.expenseAmount,
+                ]}
+              >
+                {formatCurrency(metrics.netTotal)}
               </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+            </View>
+          </View>
 
-      {/* Hero card highlighting the net amount for the selected period */}
-      <View style={styles.heroCard}>
-        <Text style={styles.heroEyebrow}>{activePeriodLabel}</Text>
-        <Text style={styles.heroValue}>{formatCurrency(metrics.netTotal)}</Text>
-        <Text style={styles.heroSubtitle}>
-          {metrics.netTotal >= 0 ? "Net positive" : "Net spending"} across your latest activity
-        </Text>
-      </View>
+          <View style={styles.comparisonChartRow}>
+            <View style={styles.comparisonMiniChart}>
+              <View style={styles.comparisonChartFloor} />
 
-      {/* Summary cards for total expenses and income */}
-      <View style={styles.summaryGrid}>
-        <SummaryCard
-          label="Expenses"
-          // Expense totals are stored/aggregated as positive magnitudes,
-          // but displayed as negative for clearer financial meaning.
-          value={formatCurrency(-metrics.periodExpenseTotal)}
-          accent="#DC2626"
-          icon="caret-up-outline"
-        />
-        <SummaryCard
-          label="Income"
-          value={formatCurrency(metrics.periodIncomeTotal)}
-          accent="#059669"
-          icon="caret-down-outline"
-        />
+              <View style={styles.comparisonBarsWrap}>
+                <View style={styles.comparisonBarSlot}>
+                  <View
+                    style={[
+                      styles.comparisonBarStub,
+                      styles.comparisonIncomeBar,
+                      { height: incomeBarHeight },
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.comparisonBarSlot}>
+                  <View
+                    style={[
+                      styles.comparisonBarStub,
+                      styles.comparisonExpenseBar,
+                      { height: expenseBarHeight },
+                    ]}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.comparisonLegend}>
+              <View style={styles.comparisonLegendRow}>
+                <View style={styles.comparisonLegendLabelWrap}>
+                  <View style={[styles.comparisonLegendDot, styles.comparisonIncomeDot]} />
+                  <Text style={styles.comparisonLegendLabel}>Income</Text>
+                </View>
+                <Text style={[styles.comparisonLegendValue, styles.incomeAmount]}>
+                  {formatCurrency(metrics.periodIncomeTotal)}
+                </Text>
+              </View>
+
+              <View style={styles.comparisonLegendRow}>
+                <View style={styles.comparisonLegendLabelWrap}>
+                  <View style={[styles.comparisonLegendDot, styles.comparisonExpenseDot]} />
+                  <Text style={styles.comparisonLegendLabel}>Expense</Text>
+                </View>
+                <Text style={[styles.comparisonLegendValue, styles.expenseAmount]}>
+                  -{formatCurrency(metrics.periodExpenseTotal)}
+                </Text>
+              </View>
+
+              <View style={styles.comparisonDivider} />
+
+              <Text
+                style={[
+                  styles.comparisonNetValue,
+                  metrics.netTotal >= 0 ? styles.incomeAmount : styles.expenseNetValue,
+                ]}
+              >
+                {formatCurrency(metrics.netTotal)}
+              </Text>
+            </View>
+          </View>
+        </View>
       </View>
 
       {/* Category spending breakdown section */}
@@ -695,30 +723,33 @@ export default function DashboardScreen() {
           {metrics.topCategories.length > 0 ? (
             <>
               <AnimatedDonutChart
-                key={`${selectedPeriod}-${metrics.topCategories.map((category) => `${category.name}:${category.total}`).join("|")}`}
+                key={`${selectedMonthIndex}-${metrics.topCategories.map((category) => `${category.name}:${category.total}`).join("|")}`}
                 categories={metrics.topCategories}
                 total={metrics.periodExpenseTotal}
               />
 
-              {metrics.topCategories.map((category) => (
-                <View key={category.name} style={styles.categoryRow}>
-                  {/* Top row containing category name and formatted amount */}
-                  <View style={styles.categoryHeader}>
-                    <View style={styles.categoryNameWrap}>
-                      {/* Small color dot matching this category's chart slice */}
-                      <View style={[styles.categoryDot, { backgroundColor: category.color }]} />
-                      <Text style={styles.categoryName}>{category.name}</Text>
-                    </View>
-                    <Text style={styles.categoryAmount}>{formatCurrency(category.total)}</Text>
-                  </View>
+              <View style={styles.categoryLegend}>
+                {metrics.topCategories.map((category) => (
+                  <View key={category.name} style={styles.categoryRow}>
+                    <View
+                      style={[styles.categoryColorLine, { backgroundColor: category.color }]}
+                    />
 
-                  <Text style={styles.categoryShare}>{Math.round(category.share * 100)}% of spending</Text>
-                </View>
-              ))}
+                    <View style={styles.categoryText}>
+                      <Text numberOfLines={1} style={styles.categoryName}>
+                        {category.name}
+                      </Text>
+                      <Text style={styles.categoryAmount}>{formatCurrency(category.total)}</Text>
+                    </View>
+
+                    <Text style={styles.categoryShare}>{Math.round(category.share * 100)}%</Text>
+                  </View>
+                ))}
+              </View>
             </>
           ) : (
             <Text style={styles.emptySectionText}>
-              No expense categories recorded for {activePeriodLabel.toLowerCase()}.
+              No expense categories recorded for {selectedMonthLabel.toLowerCase()}.
             </Text>
           )}
         </View>
@@ -804,7 +835,7 @@ export default function DashboardScreen() {
             </View>
           ) : (
             <Text style={styles.emptySectionText}>
-              No transactions recorded for {activePeriodLabel.toLowerCase()}.
+              No transactions recorded for {selectedMonthLabel.toLowerCase()}.
             </Text>
           )}
         </View>
@@ -873,112 +904,309 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
-  // Main hero summary card near the top of the screen.
-  heroCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 22,
+  // Header row that introduces the overview and aligns the month selector to the right.
+  summaryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 14,
+    zIndex: 20,
   },
 
-  // Small label above the hero value, e.g. "This month".
-  heroEyebrow: {
-    color: "#111727",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 10,
+  // Copy block on the left side of the summary header.
+  summaryHeaderCopy: {
+    flex: 1,
+    gap: 6,
+    paddingTop: 4,
   },
 
-  // Large net total value shown in the hero card.
-  heroValue: {
-    color: "#111827",
-    fontSize: 34,
+  // Main title for the dashboard summary area.
+  summaryHeaderTitle: {
+    color: "#0F172A",
+    fontSize: 28,
     fontWeight: "900",
   },
 
-  // Secondary text below the hero value.
-  heroSubtitle: {
-    color: "#111727",
+  // Support text beneath the overview title.
+  summaryHeaderSubtitle: {
+    color: "#64748B",
     fontSize: 15,
-    marginTop: 8,
+    lineHeight: 22,
   },
 
-  // Two-column layout for the summary cards.
-  summaryGrid: {
-    flexDirection: "row",
-    gap: 14,
+  // Relative wrapper used to anchor the month dropdown below the button.
+  monthMenuWrap: {
+    position: "relative",
+    alignItems: "flex-end",
   },
 
-  // Wrapper for the period filter chips.
-  periodFilterWrap: {
-    alignSelf: "center",
-    width: "100%",
+  // Top-right month selector button.
+  monthButton: {
+    minWidth: 128,
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
-    flexWrap: "wrap",
-    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
 
-  // Base style for an inactive period chip.
-  periodChip: {
-    backgroundColor: "#E2E8F0",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-
-  // Active state background for a selected period chip.
-  periodChipActive: {
-    backgroundColor: "#2563EB",
-  },
-
-  // Base text style for period chips.
-  periodChipText: {
-    color: "#334155",
-    fontSize: 13,
+  // Text inside the month selector button.
+  monthButtonText: {
+    color: "#0F172A",
+    fontSize: 14,
     fontWeight: "700",
   },
 
-  // Text color override for the selected period chip.
-  periodChipTextActive: {
-    color: "#FFFFFF",
-  },
-
-  // Reusable summary card container.
-  summaryCard: {
-    flex: 1,
+  // Dropdown card listing the available months.
+  monthMenu: {
+    position: "absolute",
+    top: 52,
+    right: 0,
+    width: 170,
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 8,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
 
-  // Small circular icon badge inside a summary card.
-  summaryIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  // One pressable month row inside the dropdown.
+  monthMenuItem: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
 
-  // Label text in the summary card.
-  summaryLabel: {
-    color: "#64748B",
+  // Highlight for the selected month row.
+  monthMenuItemActive: {
+    backgroundColor: "#EFF6FF",
+  },
+
+  // Base month label styling.
+  monthMenuText: {
+    color: "#334155",
     fontSize: 14,
     fontWeight: "600",
   },
 
-  // Main amount text in the summary card.
-  summaryValue: {
-    color: "#111827",
-    fontSize: 24,
-    fontWeight: "800",
-    marginTop: 8,
+  // Emphasized month label styling when selected.
+  monthMenuTextActive: {
+    color: "#2563EB",
+    fontWeight: "700",
   },
 
   // Groups a heading with its card container.
   sectionGroup: {
     gap: 10,
+  },
+
+  // Elevated card for the compact expenses-vs-income comparison.
+  comparisonCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 26,
+    padding: 20,
+    gap: 20,
+    // shadowColor: "#000000",
+    // shadowOpacity: 0.12,
+    // shadowRadius: 18,
+    // shadowOffset: { width: 0, height: 10 },
+    // elevation: 6,
+  },
+
+  // Header row inside the comparison card.
+  comparisonHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  // Current month label inside the comparison card.
+  comparisonTitle: {
+    color: "#0F172A",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+
+  // Supporting copy for the comparison chart.
+  comparisonSubtitle: {
+    color: "#64748B",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+    maxWidth: 220,
+  },
+
+  // Small badge highlighting the net balance.
+  netPill: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    minWidth: 92,
+  },
+
+  // Label inside the net badge.
+  netPillLabel: {
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  // Net amount inside the badge.
+  netPillValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+
+  // Main layout for the screenshot-inspired chart + legend block.
+  comparisonChartRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 18,
+  },
+
+  // Left chart area that holds the two compact comparison bars.
+  comparisonMiniChart: {
+    width: 150,
+    height: 152,
+    justifyContent: "flex-end",
+    position: "relative",
+  },
+
+  // Baseline under the two comparison bars.
+  comparisonChartFloor: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 1,
+    backgroundColor: "#E2E8F0",
+  },
+
+  // Horizontal layout for the tiny income and expense bars.
+  comparisonBarsWrap: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    paddingLeft: 4,
+    paddingRight: 10,
+  },
+
+  // Slot that controls each bar's footprint.
+  comparisonBarSlot: {
+    width: 64,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+
+  // Shared shape for the custom comparison bars.
+  comparisonBarStub: {
+    width: "100%",
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+
+  // Small green income bar like the reference card.
+  comparisonIncomeBar: {
+    backgroundColor: "#22C55E",
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+  },
+
+  // Taller light expense bar like the reference card.
+  comparisonExpenseBar: {
+    backgroundColor: "#F5F5F5",
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+
+  // Right column for legend rows and the emphasized net figure.
+  comparisonLegend: {
+    flex: 1,
+    gap: 14,
+    paddingBottom: 2,
+  },
+
+  // One legend row with label on the left and value on the right.
+  comparisonLegendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  // Left side of each legend row.
+  comparisonLegendLabelWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  // Circular color bullet in the legend.
+  comparisonLegendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+  },
+
+  // Green dot for income.
+  comparisonIncomeDot: {
+    backgroundColor: "#22C55E",
+  },
+
+  // Light dot for expense.
+  comparisonExpenseDot: {
+    backgroundColor: "#F5F5F5",
+  },
+
+  // Legend label text.
+  comparisonLegendLabel: {
+    color: "#475569",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  // Legend amount text.
+  comparisonLegendValue: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  // Divider above the net amount.
+  comparisonDivider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginTop: 2,
+  },
+
+  // Larger net total aligned to the bottom-right.
+  comparisonNetValue: {
+    fontSize: 19,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+
+  // Accent color for a negative net figure on the dark card.
+  expenseNetValue: {
+    color: "#E879F9",
   },
 
   // Generic white content card used for dashboard sections.
@@ -998,6 +1226,7 @@ const styles = StyleSheet.create({
 
   // Action/link text such as "View all".
   linkText: {
+    alignSelf: "center",
     color: "#2563EB",
     fontSize: 14,
     fontWeight: "700",
@@ -1005,20 +1234,33 @@ const styles = StyleSheet.create({
 
   // Stack for recent activity rows and the footer action.
   transactionList: {
-    marginTop: -2,
+    marginTop: -17,
+    marginHorizontal: -18,
+  },
+
+  // Compact legend cards shown below the donut chart.
+  categoryLegend: {
+    width: "100%",
+    marginTop: 8,
   },
 
   // Wrapper for each category item in the spending list.
   categoryRow: {
-    gap: 10,
-    paddingTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF2F7",
   },
 
   // Container that centers the donut chart and its overlay content.
   pieChartWrap: {
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 4,
+    marginTop: 2,
+    marginBottom: 16,
   },
 
   // Center overlay that turns the pie chart into a readable dashboard donut.
@@ -1026,72 +1268,61 @@ const styles = StyleSheet.create({
     position: "absolute",
     alignItems: "center",
     justifyContent: "center",
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 132,
+    height: 132,
+    borderRadius: 66,
     backgroundColor: "#FFFFFF",
   },
 
-  // Small label inside the donut chart.
+  // Small label above the donut total.
   pieChartCenterLabel: {
-    color: "#64748B",
+    color: "#6B7280",
     fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    fontWeight: "600",
+    marginBottom: 6,
   },
 
   // Total amount displayed in the center of the donut chart.
   pieChartCenterValue: {
     color: "#0F172A",
-    fontSize: 20,
-    fontWeight: "900",
-    marginTop: 6,
+    fontSize: 18,
+    fontWeight: "500",
     textAlign: "center",
   },
 
-  // Top row of each category item containing label and amount.
-  categoryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  // Slim legend marker that matches the donut slice color.
+  categoryColorLine: {
+    width: 28,
+    height: 4,
+    borderRadius: 999,
   },
 
-  // Left side of the category row with dot + name.
-  categoryNameWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  // Middle text column for category details.
+  categoryText: {
     flex: 1,
-    paddingRight: 12,
-  },
-
-  // Small colored dot representing the category color.
-  categoryDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    minWidth: 0,
   },
 
   // Category label text.
   categoryName: {
-    color: "#111827",
-    fontSize: 15,
-    fontWeight: "600",
+    color: "#1F2937",
+    fontSize: 16,
+    fontWeight: "500",
   },
 
-  // Category amount text on the right.
+  // Category amount text under the label.
   categoryAmount: {
-    color: "#334155",
+    color: "#6B7280",
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "400",
+    marginTop: 3,
   },
 
-  // Secondary text showing the share of total category spend.
+  // Large percentage shown at the far right of each legend row.
   categoryShare: {
-    color: "#64748B",
-    fontSize: 13,
-    fontWeight: "600",
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: "500",
   },
 
   // Shared empty text used within dashboard sections.
@@ -1155,6 +1386,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 14,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: "#E2E8F0",
   },
@@ -1206,6 +1438,7 @@ const styles = StyleSheet.create({
   // Footer action placed after the recent activity rows.
   transactionFooter: {
     paddingTop: 14,
+    paddingHorizontal: 18,
     alignItems: "flex-end",
   },
 
