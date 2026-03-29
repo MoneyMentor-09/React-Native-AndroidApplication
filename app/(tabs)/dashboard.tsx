@@ -47,6 +47,7 @@ import Svg, { Circle, G } from "react-native-svg";
 // ---------------------
 // fetchTransactions retrieves saved transactions from your data layer.
 // Transaction type defines the shape of a transaction object.
+import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import { fetchTransactions, type Transaction } from "../../lib/transactions";
 
 /**
@@ -466,13 +467,23 @@ function buildDashboardMetrics(
 
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
 
     // Sum only expense transactions in this 7-day range.
     const total = periodTransactions.reduce((sum, tx) => {
       if (tx.type === "income") {
         return sum;
       }
+    // Sum only expense transactions in this 7-day range.
+    const total = periodTransactions.reduce((sum, tx) => {
+      if (tx.type === "income") {
+        return sum;
+      }
 
+      const txDate = new Date(tx.date);
+      return txDate >= weekStart && txDate < weekEnd ? sum + Math.abs(tx.amount) : sum;
+    }, 0);
       const txDate = new Date(tx.date);
       return txDate >= weekStart && txDate < weekEnd ? sum + Math.abs(tx.amount) : sum;
     }, 0);
@@ -518,10 +529,11 @@ function AnimatedDonutChart({
   total: number;
 }) {
   const progress = useRef(new Animated.Value(0)).current;
-  const chartSize = 260;
-  const strokeWidth = 30;
+  const chartSize = 248;
+  const strokeWidth = 24;
   const radius = (chartSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
+  const segmentGap = 8;
 
   useEffect(() => {
     progress.setValue(0);
@@ -565,7 +577,8 @@ function AnimatedDonutChart({
           />
 
           {categories.map((category) => {
-            const sliceLength = circumference * category.share;
+            const rawSliceLength = circumference * category.share;
+            const sliceLength = Math.max(rawSliceLength - segmentGap, 0);
             const gapLength = Math.max(circumference - sliceLength, 0);
             const strokeDashoffset = -circumference * cumulativeShare;
 
@@ -580,7 +593,7 @@ function AnimatedDonutChart({
                 fill="none"
                 stroke={category.color}
                 strokeWidth={strokeWidth}
-                strokeLinecap="butt"
+                strokeLinecap="round"
                 strokeDasharray={`${sliceLength} ${gapLength}`}
                 strokeDashoffset={strokeDashoffset}
               />
@@ -688,6 +701,30 @@ export default function DashboardScreen() {
     }
   };
 
+  const loadDisplayName = async () => {
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setDisplayName("User");
+        return;
+      }
+
+      const profileName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.first_name ||
+        user.email?.split("@")[0] ||
+        "User";
+
+      setDisplayName(profileName);
+    } catch {
+      setDisplayName("User");
+    }
+  };
+
   /**
    * Load dashboard data once when the screen first mounts.
    *
@@ -695,7 +732,17 @@ export default function DashboardScreen() {
    */
   useEffect(() => {
     void loadTransactions();
+    void loadDisplayName();
   }, []);
+
+  useEffect(() => {
+    Animated.timing(monthMenuAnimation, {
+      toValue: isMonthMenuOpen ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [isMonthMenuOpen, monthMenuAnimation]);
 
   // Loading state shown before transactions are ready.
   if (isLoading) {
@@ -744,6 +791,11 @@ export default function DashboardScreen() {
       </View>
     );
   }
+
+  const selectedYear = new Date().getFullYear();
+  const selectedMonthLabel =
+    MONTH_OPTIONS.find((option) => option.monthIndex === selectedMonthIndex)?.label ??
+    MONTH_OPTIONS[new Date().getMonth()].label;
 
   // Derive dashboard-ready summary values from the raw transactions.
   const rangeLabel = formatRangeLabel(startDate, endDate);
@@ -1821,7 +1873,8 @@ const styles = StyleSheet.create({
   pieChartWrap: {
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 4,
+    marginTop: 2,
+    marginBottom: 16,
   },
 
   // Center overlay that turns the pie chart into a readable dashboard donut.
@@ -1829,27 +1882,25 @@ const styles = StyleSheet.create({
     position: "absolute",
     alignItems: "center",
     justifyContent: "center",
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 132,
+    height: 132,
+    borderRadius: 66,
     backgroundColor: "#FFFFFF",
   },
 
-  // Small label inside the donut chart.
+  // Small label above the donut total.
   pieChartCenterLabel: {
-    color: "#64748B",
+    color: "#6B7280",
     fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    fontWeight: "600",
+    marginBottom: 6,
   },
 
   // Total amount displayed in the center of the donut chart.
   pieChartCenterValue: {
     color: "#0F172A",
-    fontSize: 20,
-    fontWeight: "900",
-    marginTop: 6,
+    fontSize: 18,
+    fontWeight: "500",
     textAlign: "center",
   },
 
@@ -1864,6 +1915,8 @@ const styles = StyleSheet.create({
 
   // Middle text column for category details.
   categoryText: {
+  // Middle text column for category details.
+  categoryText: {
     flex: 1,
   },
 
@@ -1874,14 +1927,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Category amount text on the right.
+  // Category amount text under the label.
   categoryAmount: {
     color: "#334155",
     fontSize: 15,
     fontWeight: "800",
   },
 
-  // Secondary text showing the share of total category spend.
+  // Large percentage shown at the far right of each legend row.
   categoryShare: {
     color: "#64748B",
     fontSize: 13,
@@ -1949,6 +2002,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 14,
+    paddingHorizontal: 18,
     paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: "#E2E8F0",
