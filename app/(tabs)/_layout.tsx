@@ -36,6 +36,11 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 // useSafeAreaInsets returns top/bottom/left/right padding values.
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// Help chat widget
+// ----------------
+// Floating support/AI chat button shown across all tab screens.
+import HelpChatWidget from "../../components/HelpChatWidget";
+
 // Sidebar width constant
 // ----------------------
 // Defines the fixed width of the sidebar drawer.
@@ -418,6 +423,9 @@ export default function TabsLayout() {
             />
           </Pressable>
         )}
+
+        {/* Global floating help chat button / modal */}
+        <HelpChatWidget />
       </Animated.View>
     </View>
   );
