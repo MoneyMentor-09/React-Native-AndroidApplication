@@ -70,7 +70,7 @@ type DashboardMetrics = {
  * --------------------
  * Restricts the dashboard filter to only the supported time windows.
  */
-type DashboardPeriod = "week" | "month" | "year";
+type DashboardPeriod = "week" | "month" | "year" | "alltime";
 
 /**
  * CHART_COLORS
@@ -88,9 +88,10 @@ const CHART_COLORS = ["#2563EB", "#0F766E", "#EA580C", "#7C3AED", "#DC2626"];
  * label -> user-facing text shown in the chip
  */
 const PERIOD_OPTIONS: Array<{ key: DashboardPeriod; label: string }> = [
-  { key: "week", label: "This week" },
-  { key: "month", label: "This month" },
-  { key: "year", label: "This year" },
+  { key: "week", label: "This Week" },
+  { key: "month", label: "This Month" },
+  { key: "year", label: "This Year" },
+  { key: "alltime", label: "All Time" },
 ];
 
 /**
@@ -179,36 +180,45 @@ function buildDashboardMetrics(transactions: Transaction[], period: DashboardPer
   const start = new Date(now);
   const end = new Date(now);
 
-  if (period === "week") {
-    // JavaScript getDay():
-    // 0 = Sunday, 1 = Monday, ... 6 = Saturday
-    // This implementation treats Sunday as the first day of the week.
-    const dayOfWeek = now.getDay();
+    if (period === "week") {
+        // JavaScript getDay():
+        // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+        // This implementation treats Sunday as the first day of the week.
+        const dayOfWeek = now.getDay();
 
-    // Move start to the beginning of the current week at midnight.
-    start.setHours(0, 0, 0, 0);
-    start.setDate(now.getDate() - dayOfWeek);
+        // Move start to the beginning of the current week at midnight.
+        start.setHours(0, 0, 0, 0);
+        start.setDate(now.getDate() - dayOfWeek);
 
-    // End is 7 days after the week start, also at midnight.
-    end.setHours(0, 0, 0, 0);
-    end.setDate(start.getDate() + 7);
-  } else if (period === "month") {
-    // Start at the first day of the current month.
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
+        // End is 7 days after the week start, also at midnight.
+        end.setHours(0, 0, 0, 0);
+        end.setDate(start.getDate() + 7);
+    } else if (period === "month") {
+        // Start at the first day of the current month.
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
 
-    // End at the first day of the next month.
-    end.setMonth(now.getMonth() + 1, 1);
-    end.setHours(0, 0, 0, 0);
-  } else {
-    // Year view:
-    // start at January 1st of the current year
-    // end at January 1st of the next year
-    start.setMonth(0, 1);
-    start.setHours(0, 0, 0, 0);
-    end.setFullYear(now.getFullYear() + 1, 0, 1);
-    end.setHours(0, 0, 0, 0);
-  }
+        // End at the first day of the next month.
+        end.setMonth(now.getMonth() + 1, 1);
+        end.setHours(0, 0, 0, 0);
+    } else if (period === "year") {
+
+        // Year view:
+        // start at January 1st of the current year
+        // end at January 1st of the next year
+        start.setMonth(0, 1);
+        start.setHours(0, 0, 0, 0);
+        end.setFullYear(now.getFullYear() + 1, 0, 1);
+        end.setHours(0, 0, 0, 0);
+    } else if (period === "alltime") {
+
+        // All Time view:
+        // start at a fixed point in the past (January 1, 1970)
+        // end 100 years after now
+        start.setFullYear(1970, 0, 1);
+        start.setHours(0, 0, 0, 0);
+        end.setDate(now.getDate() + 365 * 100);
+    }
 
   // Keep only transactions whose dates are valid and fall within the selected range.
   const periodTransactions = transactions.filter((tx) => {
@@ -314,7 +324,7 @@ function buildDashboardMetrics(transactions: Transaction[], period: DashboardPer
         total,
       };
     });
-  } else {
+  } else if (period === "year") {
     // Build one bucket per month for the current year.
     spendingTrend = Array.from({ length: 12 }, (_, index) => {
       const monthStart = new Date(now.getFullYear(), index, 1);
@@ -335,6 +345,27 @@ function buildDashboardMetrics(transactions: Transaction[], period: DashboardPer
         total,
       };
     });
+  } else if (period === "alltime") {
+      // Build one bucket per 3 months for the last 10 years.
+      spendingTrend = Array.from({ length: 40 }, (_, index) => {
+          const quarterStart = new Date(now.getFullYear() - 10 + Math.floor(index / 4), (index * 3) % 12, 1);
+          const quarterEnd = new Date(now.getFullYear() - 10 + Math.floor((index+1) / 4), ((index+1) * 3) % 12, 1);
+
+          // Sum only expense transactions in this quarter.
+          const total = periodTransactions.reduce((sum, tx) => {
+              if (tx.type === "income") {
+                  return sum;
+              }
+
+              const txDate = new Date(tx.date);
+              return txDate >= quarterStart && txDate < quarterEnd ? sum + Math.abs(tx.amount) : sum;
+          }, 0);
+
+          return {
+              label: "Q" + (Math.floor(index / 4) + 1) + " " + quarterStart.getFullYear(),
+              total,
+          };
+      });
   }
 
   // Sort filtered transactions newest-first, then keep only the latest five
@@ -544,7 +575,7 @@ export default function DashboardScreen() {
         />
       }
     >
-      {/* Period filter chips for week / month / year */}
+      {/* Period filter chips for week / month / year / all time */}
       <View style={styles.periodFilterWrap}>
         {PERIOD_OPTIONS.map((option) => {
           const isActive = option.key === selectedPeriod;
