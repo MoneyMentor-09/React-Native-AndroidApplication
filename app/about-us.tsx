@@ -16,11 +16,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
  * List of development team members displayed on the About Us page.
  */
 const TEAM_MEMBERS = [
-  "John Enzo Vitale",
   "Amrinder Singh",
-  "Samuel Sexton",
   "Chijioke William Okogwu",
+  "John Enzo Vitale",
   "Nick Sikorski",
+  "Samuel Sexton", 
 ];
 
 /**

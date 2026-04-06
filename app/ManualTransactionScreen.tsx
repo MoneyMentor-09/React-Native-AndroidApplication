@@ -21,7 +21,7 @@ import { createTransaction } from "../lib/transactions";
 import { router } from "expo-router/build/exports";
 
 const categories = [
-  "Food","Transport","Shopping","Entertainment","Bills","Health",
+  "Food","Transport","Shopping","Entertainment","Bills & Utilities","Health",
   "Education","Travel","Groceries","Gas","Insurance","Salary",
   "Freelance","Investment","Other"
 ];

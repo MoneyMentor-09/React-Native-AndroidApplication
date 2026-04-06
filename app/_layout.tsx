@@ -58,11 +58,10 @@ export default function RootLayout() {
                 onPress={() => router.back()}
                 accessibilityRole="button"
                 accessibilityLabel="Go back"
-                style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+                style={{ paddingHorizontal: 1, paddingVertical: 8 }}
               >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Ionicons name="arrow-back" size={20} color="#2563EB" />
-                  <Text style={{ color: "#2563EB", fontSize: 16, fontWeight: "600" }}>Back</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Ionicons name="arrow-back" size={25} color="#2563EB" />
                 </View>
               </Pressable>
             ) : null
@@ -90,7 +89,7 @@ export default function RootLayout() {
         */}
         <Stack.Screen
           name="ReceiptCaptureScreen"
-          options={{ title: "Receipt Capture" }}
+          options={{ title: "Receipt Capture", headerTitleAlign: "center", headerTitleStyle: { fontSize: 20, fontWeight: "800" } }}
         />
             {/* 
           Receipt capture screen:
@@ -98,12 +97,12 @@ export default function RootLayout() {
         */}
         <Stack.Screen
           name="ManualTransactionScreen"
-          options={{ title: "Manual Transaction" }}
+          options={{ title: "Manual Transaction", headerTitleAlign: "center", headerTitleStyle: { fontSize: 20, fontWeight: "800" } }}
         />
 
         <Stack.Screen
           name="profile"
-          options={{ title: "Profile" }}
+          options={{ title: "Profile", headerTitleAlign: "center", headerTitleStyle: { fontSize: 20, fontWeight: "800" } }}
         />
       </Stack>
 

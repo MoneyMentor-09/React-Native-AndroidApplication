@@ -1,178 +1,629 @@
-/**
- * Ionicons
- * --------
- * A vector icon library included with Expo. It provides a large set
- * of prebuilt icons that can be easily used in React Native apps.
- * In this screen, the wallet icon visually represents budgeting
- * and financial management.
- */
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  FlatList,
+  TextInput,
+  ScrollView,
+} from "react-native";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 
-/**
- * React Native Core Components
- * ----------------------------
- * View       → Layout container used to group UI elements.
- * Text       → Displays textual content.
- * StyleSheet → Utility for defining component styles efficiently.
- * Pressable  → Touchable component that handles user interaction.
- */
-import { View, Text, StyleSheet, Pressable } from "react-native";
+type Budget = {
+  id: string;
+  category: string;
+  amount: number;
+  spent: number;
+  user_id: string;
+  purpose?: string;
+  month: string; // "YYYY-MM"
+};
 
-/**
- * Router from expo-router
- * -----------------------
- * Used for navigation between screens. The router.push()
- * method allows the app to navigate programmatically
- * to another route in the application.
- */
-import { router } from "expo-router";
+type Transaction = {
+  category: string;
+  amount: number;
+  type: "income" | "expense";
+  created_at: string;
+};
 
-/**
- * budgetScreen Component
- * ----------------------
- * This screen represents the Budget section of the application.
- * It provides users with a high-level entry point to manage
- * spending limits and track financial activity.
- */
-export default function budgetScreen() {
+/* PREDEFINED CATEGORY LIST */
+const CATEGORIES = [
+  "Food & Dining",
+  "Transportation",
+  "Shopping",
+  "Entertainment",
+  "Bills & Utilities",
+  "Healthcare",
+  "Education",
+  "Travel",
+  "Groceries",
+  "Gas",
+  "Rent",
+  "Insurance",
+  "Salary",
+  "Freelance",
+  "Investment",
+  "Other",
+];
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const YEARS = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
+
+export default function BudgetScreen() {
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+
+  const [category, setCategory] = useState("");
+  const [categoryPopupVisible, setCategoryPopupVisible] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [purpose, setPurpose] = useState("");
+
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [budgetToDelete, setBudgetToDelete] = useState<Budget | null>(null);
+
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  // For Month/Year dropdowns
+  const [monthPopupVisible, setMonthPopupVisible] = useState(false);
+  const [yearPopupVisible, setYearPopupVisible] = useState(false);
+
+  const today = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth()); // 0-indexed
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+  const monthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+
+  /* FETCH DATA */
+  const fetchData = async () => {
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user) return;
+
+      const monthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`; // "YYYY-MM"
+      const startOfMonth = `${monthStr}-01`;
+      const endOfMonth = `${monthStr}-31`;
+
+      const { data: budgetsData } = await supabase
+        .from("budgets")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("month", monthStr)
+        .order("category", { ascending: true });
+
+      const { data: txData } = await supabase
+        .from("transactions")
+        .select("category, amount, type, created_at")
+        .eq("user_id", user.id)
+        .eq("type", "expense")
+        .gte("created_at", startOfMonth)
+        .lte("created_at", endOfMonth);
+
+      setBudgets(budgetsData || []);
+      setTransactions(txData || []);
+    } catch (err) {
+      console.log("Fetch error:", err);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [selectedMonth, selectedYear])
+  );
+
+  /* CALCULATE SPENT */
+  const getSpent = (cat: string) =>
+    transactions
+      .filter((t) => t.category === cat)
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+
+  /* SAVE BUDGET */
+  const saveBudget = async () => {
+    if (!category || !amount) {
+      setErrorMessage("Category and Amount are required.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    const categoryExists = budgets.some(
+      (b) => b.category === category && (!editingBudget || b.id !== editingBudget.id)
+    );
+
+    if (categoryExists) {
+      setErrorMessage("You already have a budget for this category.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user) return;
+
+      const parsedAmount = Number.parseFloat(amount) || 0;
+      const spent = getSpent(category);
+      const monthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+
+      if (editingBudget) {
+        await supabase
+          .from("budgets")
+          .update({ category, amount: parsedAmount, spent, purpose, month: monthStr })
+          .eq("id", editingBudget.id);
+      } else {
+        await supabase.from("budgets").insert({
+          user_id: user.id,
+          category,
+          amount: parsedAmount,
+          spent,
+          purpose,
+          month: monthStr,
+        });
+      }
+
+      resetForm();
+      fetchData();
+    } catch (err) {
+      console.log("Save error:", err);
+    }
+  };
+
+  /* CONFIRM DELETE */
+  const confirmDelete = (budget: Budget) => {
+    setBudgetToDelete(budget);
+    setDeleteModalVisible(true);
+  };
+
+  /* DELETE BUDGET */
+  const deleteBudget = async () => {
+    if (!budgetToDelete) return;
+    try {
+      const supabase = getSupabaseBrowserClient();
+      await supabase.from("budgets").delete().eq("id", budgetToDelete.id);
+      setDeleteModalVisible(false);
+      setBudgetToDelete(null);
+      fetchData();
+    } catch (err) {
+      console.log("Delete error:", err);
+    }
+  };
+
+  /* RESET FORM */
+  const resetForm = () => {
+    setModalVisible(false);
+    setEditingBudget(null);
+    setCategory("");
+    setAmount("");
+    setPurpose("");
+    setCategoryPopupVisible(false);
+  };
+
+  /* RENDER BUDGET CARD */
+  const renderBudget = ({ item }: { item: Budget }) => {
+    const spent = getSpent(item.category);
+    const percentage = item.amount ? Math.min((spent / item.amount) * 100, 100) : 0;
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.title}>{item.category}</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Pressable
+              onPress={() => {
+                setEditingBudget(item);
+                setCategory(item.category);
+                setAmount(item.amount.toString());
+                setPurpose(item.purpose || "");
+                setModalVisible(true);
+              }}
+            >
+              <Ionicons name="pencil" size={18} color="#2563EB" />
+            </Pressable>
+            <Pressable onPress={() => confirmDelete(item)}>
+              <Ionicons name="trash" size={18} color="#DC2626" />
+            </Pressable>
+          </View>
+        </View>
+
+        <Text style={styles.meta}>
+          ${spent.toFixed(2)} / ${item.amount.toFixed(2)}
+        </Text>
+
+        <View style={styles.progressBg}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${percentage}%`,
+                backgroundColor:
+                  percentage >= 100
+                    ? "#DC2626"
+                    : percentage >= 90
+                    ? "#F59E0B"
+                    : "#16A34A",
+              },
+            ]}
+          />
+        </View>
+
+        <Text style={styles.meta}>
+          Remaining: ${(item.amount - spent).toFixed(2)}
+        </Text>
+
+        {item.purpose && <Text style={styles.purpose}>Purpose: {item.purpose}</Text>}
+      </View>
+    );
+  };
+
   return (
-
-    /**
-     * Main container that centers the UI content
-     * both vertically and horizontally.
-     */
     <View style={styles.container}>
+      {/* Month / Year Dropdowns */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
+        <Pressable
+          style={styles.dropdownInput}
+          onPress={() => setMonthPopupVisible(true)}
+        >
+          <Text>{MONTHS[selectedMonth]}</Text>
+          <Ionicons name="chevron-down" size={20} color="#6B7280" />
+        </Pressable>
 
-      {/*
-        Icon container
-        --------------
-        Provides a rounded background around the icon
-        to visually highlight the budgeting feature.
-      */}
-      <View style={styles.iconWrap}>
-        <Ionicons
-          name="wallet-outline"   // Icon representing a wallet / budget
-          size={40}               // Icon size in pixels
-          color="#2563EB"         // Primary application blue
-        />
+        <Pressable
+          style={styles.dropdownInput}
+          onPress={() => setYearPopupVisible(true)}
+        >
+          <Text>{selectedYear}</Text>
+          <Ionicons name="chevron-down" size={20} color="#6B7280" />
+        </Pressable>
       </View>
 
-      {/*
-        Screen Title
-        ------------
-        Main heading that indicates the purpose of the page.
-      */}
-      <Text style={styles.title}>Budget</Text>
+      {/* Month Popup */}
+      {monthPopupVisible && (
+        <View style={styles.modal}>
+          <View style={[styles.modalContent, { maxHeight: "70%" }]}>
+            <Text style={styles.modalTitle}>Select Month</Text>
+            <ScrollView>
+              {MONTHS.map((m, idx) => (
+                <Pressable
+                  key={m}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setSelectedMonth(idx);
+                    setMonthPopupVisible(false);
+                  }}
+                >
+                  <Text>{m}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              onPress={() => setMonthPopupVisible(false)}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
-      {/*
-        Subtitle / Description
-        ----------------------
-        Provides context for what users can do on this screen.
-        Explains that budgets and spending limits can be managed.
-      */}
-      <Text style={styles.subtitle}>
-        Manage your spending limits and track progress across accounts.
-      </Text>
+      {/* Year Popup */}
+      {yearPopupVisible && (
+        <View style={styles.modal}>
+          <View style={[styles.modalContent, { maxHeight: "70%" }]}>
+            <Text style={styles.modalTitle}>Select Year</Text>
+            <ScrollView>
+              {YEARS.map((y) => (
+                <Pressable
+                  key={y}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setSelectedYear(y);
+                    setYearPopupVisible(false);
+                  }}
+                >
+                  <Text>{y}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              onPress={() => setYearPopupVisible(false)}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
-      {/*
-        Navigation Button
-        -----------------
-        When the user presses this button, they are navigated
-        to the Transactions screen where they can review
-        individual spending records.
-      */}
+      {/* BUDGET LIST */}
+      <FlatList
+        data={budgets}
+        keyExtractor={(i) => i.id}
+        renderItem={renderBudget}
+        ListEmptyComponent={
+          <Text style={{ textAlign: "center", marginTop: 20 }}>
+            No budgets found
+          </Text>
+        }
+      />
+
+      {/* ADD BUDGET BUTTON */}
       <Pressable
-        style={styles.button}
-        onPress={() => router.push("/transactions")}
+        style={styles.primaryButton}
+        onPress={() => setModalVisible(true)}
       >
-        <Text style={styles.buttonText}>Review Transactions</Text>
+        <Text style={styles.primaryButtonText}>Add Budget</Text>
       </Pressable>
 
+      {/* Add/Edit Budget Modal */}
+      {modalVisible && (
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {editingBudget ? "Edit Budget" : "Add Budget"}
+            </Text>
+
+            <Pressable
+              style={styles.dropdownInput}
+              onPress={() => setCategoryPopupVisible(true)}
+            >
+              <Text style={{ color: category ? "#000" : "#6B7280" }}>
+                {category || "Select Category"}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </Pressable>
+
+            <TextInput
+              placeholder="Amount ($)"
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              style={styles.input}
+            />
+            <TextInput
+              placeholder="Purpose"
+              value={purpose}
+              onChangeText={setPurpose}
+              style={styles.input}
+            />
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.secondaryButton, { flex: 1 }]}
+                onPress={resetForm}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.primaryButton, { flex: 1 }]}
+                onPress={saveBudget}
+              >
+                <Text style={styles.primaryButtonText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Category Popup */}
+      {categoryPopupVisible && (
+        <View style={styles.modal}>
+          <View style={[styles.modalContent, { maxHeight: "70%" }]}>
+            <Text style={styles.modalTitle}>Select Category</Text>
+            <ScrollView>
+              {CATEGORIES.map((cat) => (
+                <Pressable
+                  key={cat}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setCategory(cat);
+                    setCategoryPopupVisible(false);
+                  }}
+                >
+                  <Text>{cat}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              onPress={() => setCategoryPopupVisible(false)}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Error Modal */}
+      {errorModalVisible && (
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Error</Text>
+            <Text style={{ marginBottom: 16, textAlign: "center" }}>
+              {errorMessage}
+            </Text>
+            <Pressable
+              style={styles.primaryButton}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={styles.primaryButtonText}>OK</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Delete Modal */}
+      {deleteModalVisible && budgetToDelete && (
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Delete Budget</Text>
+            <Text style={{ marginBottom: 16 }}>
+              Are you sure you want to delete "{budgetToDelete.category}"?
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.secondaryButton, { flex: 1 }]}
+                onPress={() => setDeleteModalVisible(false)}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.primaryButton, { flex: 1 }]}
+                onPress={deleteBudget}
+              >
+                <Text style={styles.primaryButtonText}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
 
-/**
- * Styles
- * ------
- * Centralized styling definitions for this screen.
- */
+/* STYLES */
 const styles = StyleSheet.create({
-
-  /**
-   * container
-   * ---------
-   * Main layout container for the screen.
-   */
   container: {
-    flex: 1,                     // Occupies full screen height
-    justifyContent: "center",    // Centers content vertically
-    alignItems: "center",        // Centers content horizontally
-    backgroundColor: "#FFFFFF",  // White background
-    paddingHorizontal: 24,       // Horizontal padding for spacing
+    flex: 1,
+    backgroundColor: "#fff",
+    padding: 10,
   },
-
-  /**
-   * iconWrap
-   * --------
-   * Container that holds and styles the icon.
-   */
-  iconWrap: {
-    width: 88,                   // Width of icon container
-    height: 88,                  // Height of icon container
-    borderRadius: 24,            // Rounded corners
-    backgroundColor: "#EFF6FF",  // Light blue background
-    alignItems: "center",        // Center icon horizontally
-    justifyContent: "center",    // Center icon vertically
-    marginBottom: 20,            // Space below icon
+  card: {
+    backgroundColor: "#F9FAFB",
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-
-  /**
-   * title
-   * -----
-   * Styling for the main screen heading.
-   */
   title: {
-    fontSize: 28,                // Large font size
-    fontWeight: "800",           // Extra bold text
-    color: "#111827",            // Dark gray color
+    fontSize: 18,
+    fontWeight: "700",
   },
-
-  /**
-   * subtitle
-   * --------
-   * Secondary descriptive text below the title.
-   */
-  subtitle: {
-    marginTop: 12,               // Space above subtitle
-    fontSize: 16,                // Readable font size
-    lineHeight: 22,              // Line spacing for readability
-    color: "#6B7280",            // Muted gray color
-    textAlign: "center",         // Center alignment
-    maxWidth: 320,               // Limits line width for readability
-    marginBottom: 24,            // Space above the button
+  meta: {
+    color: "#6B7280",
+    marginTop: 4,
   },
-
-  /**
-   * button
-   * ------
-   * Styling for the navigation button.
-   */
-  button: {
-    backgroundColor: "#2563EB",  // Primary blue
-    paddingHorizontal: 20,       // Horizontal padding inside button
-    paddingVertical: 14,         // Vertical padding inside button
-    borderRadius: 14,            // Rounded edges
+  purpose: {
+    marginTop: 6,
+    fontStyle: "italic",
+    color: "#6B7280",
   },
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  progressBg: {
+    height: 8,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  progressFill: {
+    height: 8,
+    borderRadius: 6,
+  },
+  primaryButton: {
+    backgroundColor: "#2563EB",
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  primaryButtonText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "700",
+  },
+  secondaryButton: {
+    borderWidth: 2,
+    borderColor: "#2563EB",
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  secondaryButtonText: {
+    textAlign: "center",
+    color: "#2563EB",
+    fontWeight: "700",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  dropdownInput: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  modal: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "rgba(0,0,0,0.3)",
+  justifyContent: "center",
+  alignItems: "center",
 
-  /**
-   * buttonText
-   * ----------
-   * Styling for the text displayed inside the button.
-   */
-  buttonText: {
-    color: "#FFFFFF",            // White text
-    fontSize: 16,                // Medium font size
-    fontWeight: "700",           // Bold text
+  zIndex: 9999,      
+  elevation: 9999,    
+},
+  modalContent: {
+  backgroundColor: "#FFFFFF",
+  borderRadius: 14,
+  padding: 24,
+  width: "90%",
+
+  zIndex: 10000,
+  elevation: 10000,
+},
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
   },
 });
