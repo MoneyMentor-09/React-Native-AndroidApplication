@@ -103,7 +103,9 @@ export default function BudgetScreen() {
 
       const monthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`; // "YYYY-MM"
       const startOfMonth = `${monthStr}-01`;
-      const endOfMonth = `${monthStr}-31`;
+      const endOfMonth = new Date(selectedYear, selectedMonth + 1, 0)
+      .toISOString()
+      .split("T")[0];
 
       const { data: budgetsData } = await supabase
         .from("budgets")
@@ -139,56 +141,95 @@ export default function BudgetScreen() {
       .filter((t) => t.category === cat)
       .reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
 
-  /* SAVE BUDGET */
-  const saveBudget = async () => {
-    if (!category || !amount) {
-      setErrorMessage("Category and Amount are required.");
+ /* SAVE BUDGET */
+const saveBudget = async () => {
+  if (!category || !amount) {
+    setErrorMessage("Category and Amount are required.");
+    setErrorModalVisible(true);
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseBrowserClient();
+
+    // ✅ Get user FIRST
+    const { data } = await supabase.auth.getSession();
+    const user = data.session?.user;
+    if (!user) return;
+
+    const parsedAmount = Number.parseFloat(amount) || 0;
+    const spent = getSpent(category);
+
+    // ✅ CHECK DUPLICATE FROM DATABASE (NOT STATE)
+    const { data: existingBudget, error: checkError } = await supabase
+      .from("budgets")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("category", category)
+      .eq("month", monthStr)
+      .maybeSingle();
+
+    if (checkError) {
+      console.log("Check error:", checkError);
+    }
+
+    if (
+      existingBudget &&
+      (!editingBudget || existingBudget.id !== editingBudget.id)
+    ) {
+      setErrorMessage(
+        "You already have a budget for this category in this month."
+      );
       setErrorModalVisible(true);
       return;
     }
 
-    const categoryExists = budgets.some(
-      (b) => b.category === category && (!editingBudget || b.id !== editingBudget.id)
-    );
-
-    if (categoryExists) {
-      setErrorMessage("You already have a budget for this category.");
-      setErrorModalVisible(true);
-      return;
-    }
-
-    try {
-      const supabase = getSupabaseBrowserClient();
-      const { data } = await supabase.auth.getSession();
-      const user = data.session?.user;
-      if (!user) return;
-
-      const parsedAmount = Number.parseFloat(amount) || 0;
-      const spent = getSpent(category);
-      const monthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-
-      if (editingBudget) {
-        await supabase
-          .from("budgets")
-          .update({ category, amount: parsedAmount, spent, purpose, month: monthStr })
-          .eq("id", editingBudget.id);
-      } else {
-        await supabase.from("budgets").insert({
-          user_id: user.id,
+    // ✅ INSERT OR UPDATE
+    if (editingBudget) {
+      const { error } = await supabase
+        .from("budgets")
+        .update({
           category,
           amount: parsedAmount,
           spent,
           purpose,
           month: monthStr,
-        });
-      }
+        })
+        .eq("id", editingBudget.id);
 
-      resetForm();
-      fetchData();
-    } catch (err) {
-      console.log("Save error:", err);
+      if (error) {
+        console.log("Update error:", error);
+        setErrorMessage(error.message);
+        setErrorModalVisible(true);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("budgets").insert({
+        user_id: user.id,
+        category,
+        amount: parsedAmount,
+        spent,
+        purpose,
+        month: monthStr,
+      });
+
+      if (error) {
+        console.log("Insert error:", error);
+        setErrorMessage(error.message);
+        setErrorModalVisible(true);
+        return;
+      }
     }
-  };
+
+    // ✅ Success
+    resetForm();
+    fetchData();
+  } catch (err) {
+    console.log("Save error:", err);
+    setErrorMessage("Something went wrong. Please try again.");
+    setErrorModalVisible(true);
+  }
+};
 
   /* CONFIRM DELETE */
   const confirmDelete = (budget: Budget) => {
@@ -236,6 +277,10 @@ export default function BudgetScreen() {
                 setCategory(item.category);
                 setAmount(item.amount.toString());
                 setPurpose(item.purpose || "");
+                
+                const [year, month] = item.month.split("-");
+                  setSelectedYear(Number(year));
+                  setSelectedMonth(Number(month) - 1);
                 setModalVisible(true);
               }}
             >
