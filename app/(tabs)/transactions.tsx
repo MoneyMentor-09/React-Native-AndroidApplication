@@ -18,7 +18,7 @@ import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 
 /* Categories same as web */
 const CATEGORIES = [
-"Food",
+"Food & Dining",
 "Transportation",
 "Shopping",
 "Entertainment",
@@ -28,7 +28,7 @@ const CATEGORIES = [
 "Travel",
 "Groceries",
 "Gas",
-"Rent/Mortgage",
+"Rent",
 "Insurance",
 "Salary",
 "Freelance",

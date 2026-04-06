@@ -26,6 +26,7 @@ import {
     TouchableOpacity,
     useWindowDimensions,
     View,
+    Image,
 } from "react-native";
 
 // SafeAreaView prevents content from overlapping device notch/status bar.
@@ -350,7 +351,7 @@ export default function InitialScreen() {
                 {/* Main branding and intro text */}
                 <View style={styles.header}>
                     <View style={styles.brandBadge}>
-                        <Text style={styles.brandBadgeText}>$</Text>
+                        <Image source={require("../assets/letter-m (1).png")} style={styles.brandImage} />
                     </View>
 
                     <Text style={styles.logoText}>Money Mentor</Text>
@@ -508,13 +509,14 @@ const styles = StyleSheet.create({
 
     // Blue logo block used as a temporary Money Mentor brand mark.
     brandBadge: {
-        width: 52,
-        height: 52,
+        width: 75,
+        height: 75,
         borderRadius: 16,
         backgroundColor: "#1D4ED8",
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 10,
+        marginTop: 10,
         shadowColor: "#1D4ED8",
         shadowOpacity: 0.2,
         shadowRadius: 10,
@@ -522,23 +524,22 @@ const styles = StyleSheet.create({
         elevation: 3,
     },
 
-    brandBadgeText: {
-        color: "#FFFFFF",
-        fontSize: 24,
-        fontWeight: "800",
-    },
+     brandImage: {
+    width: 74,
+    height: 74,
+  },    
 
     logoText: {
         color: "#0F172A",
-        fontSize: 28,
+        fontSize: 40,
         fontWeight: "800",
         letterSpacing: -0.4,
-        marginBottom: 10,
+        marginBottom: 8,
     },
 
     heroTitle: {
         color: "#0F172A",
-        fontSize: 30,
+        fontSize: 22,
         lineHeight: 36,
         fontWeight: "800",
         textAlign: "center",
@@ -548,8 +549,8 @@ const styles = StyleSheet.create({
 
     heroSubtitle: {
         color: "#475569",
-        fontSize: 16,
-        lineHeight: 24,
+        fontSize: 15,
+        lineHeight: 22,
         textAlign: "center",
         maxWidth: 340,
     },
@@ -602,14 +603,14 @@ const styles = StyleSheet.create({
         lineHeight: 34,
         fontWeight: "800",
         textAlign: "center",
-        marginBottom: 18,
+        marginBottom: 20,
         letterSpacing: -0.4,
     },
 
     slideDescription: {
         color: "#475569",
-        fontSize: 17,
-        lineHeight: 28,
+        fontSize: 15,
+        lineHeight: 25,
         textAlign: "center",
         maxWidth: 280,
     },
@@ -620,7 +621,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         alignSelf: "center",
         position: "relative",
-        marginTop: 24,
+        marginTop: 20,
         marginBottom: 18,
     },
 
@@ -656,7 +657,7 @@ const styles = StyleSheet.create({
         flexWrap: "wrap",
         justifyContent: "center",
         gap: 8,
-        marginBottom: 18,
+        marginBottom: 15,
     },
 
     previewChip: {
