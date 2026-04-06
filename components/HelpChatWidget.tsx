@@ -9,12 +9,11 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  askFinanceAssistant,
+  getHelpResponse,
   QUICK_QUESTIONS,
   type ChatMessage,
 } from "../lib/ai";
@@ -27,12 +26,11 @@ const starterMessage: ChatMessage = {
   id: "starter",
   role: "assistant",
   content:
-    "Hi! I’m your MoneyMentor help assistant. You can ask preset questions or type your own question about spending, transactions, or budgeting.",
+    "Hi! I’m your MoneyMentor help assistant. Tap one of the questions below for budgeting help and transaction insights.",
 };
 
 export default function HelpChatWidget() {
   const [visible, setVisible] = useState(false);
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([starterMessage]);
 
@@ -52,11 +50,10 @@ export default function HelpChatWidget() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
     setLoading(true);
 
     try {
-      const answer = await askFinanceAssistant(question);
+      const answer = await getHelpResponse(question);
 
       const assistantMessage: ChatMessage = {
         id: createId(),
@@ -126,7 +123,7 @@ export default function HelpChatWidget() {
               <View>
                 <Text style={styles.headerTitle}>Help Assistant</Text>
                 <Text style={styles.headerSubtitle}>
-                  Ask about your transactions and spending
+                  Quick budgeting help and money tips
                 </Text>
               </View>
 
@@ -140,50 +137,41 @@ export default function HelpChatWidget() {
               </Pressable>
             </View>
 
-            <View style={styles.quickQuestionsWrap}>
-              {quickQuestions.map((question) => (
-                <Pressable
-                  key={question.id}
-                  style={styles.quickChip}
-                  onPress={() => sendQuestion(question.prompt)}
-                >
-                  <Text style={styles.quickChipText}>{question.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-
             <FlatList
               data={messages}
               keyExtractor={(item) => item.id}
               renderItem={renderMessage}
               contentContainerStyle={styles.messagesList}
+              ListHeaderComponent={
+                <View style={styles.quickQuestionsSection}>
+                  <Text style={styles.quickQuestionsTitle}>
+                    Choose a question:
+                  </Text>
+
+                  <View style={styles.quickQuestionsWrap}>
+                    {quickQuestions.map((question) => (
+                      <Pressable
+                        key={question.id}
+                        style={styles.quickChip}
+                        onPress={() => sendQuestion(question.prompt)}
+                        disabled={loading}
+                      >
+                        <Text style={styles.quickChipText}>
+                          {question.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              }
             />
 
             {loading && (
               <View style={styles.loadingRow}>
                 <ActivityIndicator size="small" />
-                <Text style={styles.loadingText}>Thinking...</Text>
+                <Text style={styles.loadingText}>Loading response...</Text>
               </View>
             )}
-
-            <View style={styles.inputRow}>
-              <TextInput
-                value={input}
-                onChangeText={setInput}
-                placeholder="Ask about your money..."
-                placeholderTextColor="#9CA3AF"
-                style={styles.input}
-                multiline
-              />
-
-              <Pressable
-                onPress={() => sendQuestion(input)}
-                style={[styles.sendButton, loading && styles.disabledButton]}
-                disabled={loading}
-              >
-                <Ionicons name="send" size={18} color="#FFFFFF" />
-              </Pressable>
-            </View>
           </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
@@ -247,6 +235,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#F3F4F6",
   },
+  quickQuestionsSection: {
+    marginBottom: 12,
+  },
+  quickQuestionsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 10,
+  },
   quickQuestionsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -275,6 +272,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 16,
+    marginBottom: 10,
   },
   userBubble: {
     alignSelf: "flex-end",
@@ -298,38 +296,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
     paddingHorizontal: 4,
+    paddingTop: 8,
   },
   loadingText: {
     color: "#6B7280",
     fontSize: 13,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 10,
-    paddingTop: 8,
-  },
-  input: {
-    flex: 1,
-    minHeight: 46,
-    maxHeight: 100,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#111827",
-    backgroundColor: "#FFFFFF",
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  disabledButton: {
-    opacity: 0.6,
   },
 });
