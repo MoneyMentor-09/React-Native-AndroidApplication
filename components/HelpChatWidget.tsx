@@ -18,14 +18,11 @@ import {
   type ChatMessage,
 } from "../lib/ai";
 
+let messageIdCounter = 0;
+
 function createId() {
-  const secureId = globalThis.crypto?.randomUUID?.();
-
-  if (!secureId) {
-    throw new Error("Secure random UUID generation is unavailable in this runtime.");
-  }
-
-  return secureId;
+  messageIdCounter += 1;
+  return `chat-${Date.now()}-${messageIdCounter}`;
 }
 
 const starterMessage: ChatMessage = {
