@@ -41,7 +41,7 @@ import HelpChatWidget from "../../components/HelpChatWidget";
 const SIDEBAR_WIDTH = 280;
 
 type SidebarRoute = {
-  path: "/dashboard" | "/transactions" | "/budget" | "/alerts";
+  path: "/dashboard" | "/transactions" | "/budget" | "/alerts" | "/chat";
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 };
@@ -51,6 +51,7 @@ const SIDEBAR_ROUTES: SidebarRoute[] = [
   { path: "/transactions", label: "Transactions", icon: "receipt-outline" },
   { path: "/budget", label: "Budget", icon: "wallet-outline" },
   { path: "/alerts", label: "Alerts", icon: "alert-circle-outline" },
+  { path: "/chat", label: "Chat", icon: "chatbox-outline" },
 ];
 
 const HEADER_TITLES: Record<string, string> = {
@@ -58,6 +59,7 @@ const HEADER_TITLES: Record<string, string> = {
   transactions: "Transactions",
   budget: "Budget",
   alerts: "Alerts",
+  chat: "Chat",
 };
 
 export default function TabsLayout() {
@@ -235,6 +237,15 @@ export default function TabsLayout() {
                   size={size}
                   color={color}
                 />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="chat"
+            options={{
+              title: "Chat",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="chatbox-outline" size={size} color={color} />
               ),
             }}
           />
