@@ -85,6 +85,19 @@ type MonthStripItem = {
   endDate: Date;
 };
 
+type SpendingForecast = {
+  predictedTotal: number;
+  actualToDate: number;
+  expectedToDate: number;
+  elapsedRatio: number;
+  daysElapsed: number;
+  daysInMonth: number;
+  sampleSize: number;
+  monthLabel: string;
+  asOfLabel: string;
+  trendDirection: "up" | "down" | "flat";
+};
+
 /**
  * CHART_COLORS
  * ------------
@@ -369,6 +382,119 @@ function buildMonthStripItems(
       endDate,
     };
   });
+}
+
+function getMonthExpenseTotal(
+  transactions: Transaction[],
+  year: number,
+  month: number,
+  throughDay?: number,
+): number {
+  let total = 0;
+
+  for (const tx of transactions) {
+    if (tx.type === "income") {
+      continue;
+    }
+
+    const txDate = new Date(tx.date);
+
+    if (
+      Number.isNaN(txDate.getTime()) ||
+      txDate.getFullYear() !== year ||
+      txDate.getMonth() !== month ||
+      (throughDay !== undefined && txDate.getDate() > throughDay)
+    ) {
+      continue;
+    }
+
+    total += Math.abs(tx.amount);
+  }
+
+  return total;
+}
+
+function predictNextValueWithLinearRegression(values: number[]): number | null {
+  if (values.length < 2) {
+    return null;
+  }
+
+  const n = values.length;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumXX = 0;
+
+  for (let index = 0; index < n; index += 1) {
+    const x = index + 1;
+    const y = values[index];
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumXX += x * x;
+  }
+
+  const denominator = n * sumXX - sumX * sumX;
+
+  if (denominator === 0) {
+    return null;
+  }
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+  const nextValue = intercept + slope * (n + 1);
+
+  return Math.max(nextValue, 0);
+}
+
+function buildCurrentMonthExpenseForecast(
+  transactions: Transaction[],
+  baseDate = new Date(),
+  historyMonths = 6,
+): SpendingForecast | null {
+  const today = new Date(baseDate);
+  today.setHours(0, 0, 0, 0);
+
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const daysElapsed = Math.min(today.getDate(), daysInMonth);
+  const elapsedRatio = daysInMonth > 0 ? daysElapsed / daysInMonth : 0;
+
+  const historicalTotals = Array.from({ length: historyMonths }, (_, index) => {
+    const monthDate = new Date(currentYear, currentMonth - (historyMonths - index), 1);
+    return getMonthExpenseTotal(
+      transactions,
+      monthDate.getFullYear(),
+      monthDate.getMonth(),
+    );
+  });
+
+  const predictedTotal = predictNextValueWithLinearRegression(historicalTotals);
+
+  if (predictedTotal === null) {
+    return null;
+  }
+
+  const actualToDate = getMonthExpenseTotal(transactions, currentYear, currentMonth, daysElapsed);
+  const expectedToDate = predictedTotal * elapsedRatio;
+  const previousMonthTotal = historicalTotals[historicalTotals.length - 1] ?? predictedTotal;
+  const delta = predictedTotal - previousMonthTotal;
+  const relativeDelta = previousMonthTotal > 0 ? Math.abs(delta) / previousMonthTotal : 0;
+
+  return {
+    predictedTotal,
+    actualToDate,
+    expectedToDate,
+    elapsedRatio,
+    daysElapsed,
+    daysInMonth,
+    sampleSize: historicalTotals.length,
+    monthLabel: today.toLocaleDateString("en-US", { month: "long" }),
+    asOfLabel: today.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    trendDirection:
+      relativeDelta < 0.03 ? "flat" : delta > 0 ? "up" : "down",
+  };
 }
 
 /**
@@ -748,6 +874,7 @@ export default function DashboardScreen() {
   // Derive dashboard-ready summary values from the raw transactions.
   const rangeLabel = formatRangeLabel(startDate, endDate);
   const metrics = buildDashboardMetrics(transactions, startDate, endDate);
+  const spendingForecast = buildCurrentMonthExpenseForecast(transactions);
   const activePreset = getActivePreset(startDate, endDate);
   const isCustomRange = selectedQuickRange === null && activePreset === "custom";
   const comparisonMax = Math.max(metrics.periodExpenseTotal, metrics.periodIncomeTotal, 1);
@@ -759,6 +886,18 @@ export default function DashboardScreen() {
     (metrics.periodIncomeTotal / comparisonMax) * 88,
     metrics.periodIncomeTotal > 0 ? 10 : 6,
   );
+  const forecastMax = Math.max(
+    spendingForecast?.predictedTotal ?? 0,
+    spendingForecast?.actualToDate ?? 0,
+    spendingForecast?.expectedToDate ?? 0,
+    1,
+  );
+  const actualProgressWidth = spendingForecast
+    ? `${Math.max((spendingForecast.actualToDate / forecastMax) * 100, spendingForecast.actualToDate > 0 ? 6 : 0)}%`
+    : "0%";
+  const predictedProgressWidth = spendingForecast
+    ? `${Math.max((spendingForecast.predictedTotal / forecastMax) * 100, spendingForecast.predictedTotal > 0 ? 6 : 0)}%`
+    : "0%";
   const openRangeModal = () => {
     setDraftStartDate(startDate);
     setDraftEndDate(endDate);
@@ -1183,6 +1322,87 @@ export default function DashboardScreen() {
           </View>
         </View>
       </View>
+
+      {spendingForecast ? (
+        <View style={styles.sectionGroup}>
+          <Text style={styles.breakdownLabel}>Forecast</Text>
+
+          <View style={styles.forecastCard}>
+            <View style={styles.forecastHeader}>
+              <View style={styles.forecastHeaderCopy}>
+                <Text style={styles.forecastTitle}>Predicted vs Actual Spending</Text>
+              </View>
+
+              <View style={styles.forecastBadge}>
+                <Text style={styles.forecastBadgeText}>As of {spendingForecast.asOfLabel}</Text>
+              </View>
+            </View>
+
+            <View style={styles.forecastHeroRow}>
+              <View style={styles.forecastHeroPrimary}>
+                <Text style={styles.forecastValueLabel}>Predicted {spendingForecast.monthLabel} total</Text>
+                <Text style={styles.forecastPrimaryValue}>
+                  {formatCurrency(spendingForecast.predictedTotal)}
+                </Text>
+              </View>
+
+              <View style={styles.forecastHeroTrend}>
+                <Text
+                  style={[
+                    styles.forecastTrendPill,
+                    spendingForecast.trendDirection === "up"
+                      ? styles.forecastTrendPillUp
+                      : spendingForecast.trendDirection === "down"
+                        ? styles.forecastTrendPillDown
+                        : styles.forecastTrendPillFlat,
+                  ]}
+                >
+                  {spendingForecast.trendDirection === "up"
+                    ? "Above last month"
+                    : spendingForecast.trendDirection === "down"
+                      ? "Below last month"
+                      : "Close to last month"}
+                </Text>
+                <Text style={styles.forecastDeltaMeta}>
+                  Day {spendingForecast.daysElapsed} of {spendingForecast.daysInMonth}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.forecastMetricStack}>
+              <View style={styles.forecastMetricCard}>
+                <View style={styles.forecastMetricRow}>
+                  <View style={styles.forecastMetricHeader}>
+                    <View style={[styles.forecastMetricDot, styles.forecastActualDot]} />
+                    <Text style={styles.forecastMetricLabel}>Actual spent so far</Text>
+                  </View>
+                  <Text style={styles.forecastMetricValue}>
+                    {formatCurrency(spendingForecast.actualToDate)}
+                  </Text>
+                </View>
+                <View style={styles.forecastTrack}>
+                  <View style={[styles.forecastFill, styles.forecastActualFill, { width: actualProgressWidth }]} />
+                </View>
+              </View>
+
+              <View style={styles.forecastMetricCard}>
+                <View style={styles.forecastMetricRow}>
+                  <View style={styles.forecastMetricHeader}>
+                    <View style={[styles.forecastMetricDot, styles.forecastPredictedDot]} />
+                    <Text style={styles.forecastMetricLabel}>Predicted month-end</Text>
+                  </View>
+                  <Text style={styles.forecastMetricValue}>
+                    {formatCurrency(spendingForecast.predictedTotal)}
+                  </Text>
+                </View>
+                <View style={styles.forecastTrack}>
+                  <View style={[styles.forecastFill, styles.forecastPredictedFill, { width: predictedProgressWidth }]} />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
     </ScrollView>
   );
@@ -1822,6 +2042,187 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginVertical: 4,
+  },
+
+  forecastCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 18,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+
+  forecastHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  forecastHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+
+  forecastTitle: {
+    color: "#0F172A",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  forecastBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+
+  forecastBadgeText: {
+    color: "#1D4ED8",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  forecastHeroRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 16,
+  },
+
+  forecastHeroPrimary: {
+    flex: 1,
+    gap: 4,
+  },
+
+  forecastHeroTrend: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+
+  forecastValueLabel: {
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  forecastPrimaryValue: {
+    color: "#0F172A",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+
+  forecastTrendPill: {
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  forecastTrendPillUp: {
+    backgroundColor: "#FEF2F2",
+    color: "#B91C1C",
+  },
+
+  forecastTrendPillDown: {
+    backgroundColor: "#ECFDF5",
+    color: "#047857",
+  },
+
+  forecastTrendPillFlat: {
+    backgroundColor: "#F1F5F9",
+    color: "#475569",
+  },
+
+  forecastDeltaMeta: {
+    color: "#94A3B8",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  forecastMetricStack: {
+    gap: 12,
+  },
+
+  forecastMetricCard: {
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 10,
+  },
+
+  forecastMetricRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  forecastMetricHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+
+  forecastMetricDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+
+  forecastPredictedDot: {
+    backgroundColor: "#1D4ED8",
+  },
+
+  forecastActualDot: {
+    backgroundColor: "#DC2626",
+  },
+
+  forecastMetricLabel: {
+    color: "#475569",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  forecastMetricValue: {
+    color: "#0F172A",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  forecastTrack: {
+    height: 10,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "#E2E8F0",
+  },
+
+  forecastFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+
+  forecastPredictedFill: {
+    backgroundColor: "#1D4ED8",
+  },
+
+  forecastActualFill: {
+    backgroundColor: "#DC2626",
   },
 
   // Center overlay that turns the pie chart into a readable dashboard donut.
