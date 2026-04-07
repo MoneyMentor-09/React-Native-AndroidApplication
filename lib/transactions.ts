@@ -181,153 +181,56 @@ function normalizeDate(dateStr: string): string {
 // - if no keyword matches, fall back to "Other"
 //
 // This function helps reduce user effort during transaction creation.
+type CategorizationRule = {
+  category: TransactionCategory;
+  keywords: string[];
+};
+
+const INCOME_CATEGORIZATION_RULES: CategorizationRule[] = [
+  { category: "Salary", keywords: ["salary", "payroll", "paycheck"] },
+  { category: "Freelance", keywords: ["freelance", "contract", "client payment"] },
+  { category: "Investment", keywords: ["dividend", "interest", "stock", "investment"] },
+];
+
+const EXPENSE_CATEGORIZATION_RULES: CategorizationRule[] = [
+  { category: "Food & Dining", keywords: ["restaurant", "cafe", "coffee", "food", "pizza", "burger"] },
+  { category: "Groceries", keywords: ["grocery", "groceries", "supermarket", "market"] },
+  { category: "Gas", keywords: ["gas", "fuel"] },
+  { category: "Transportation", keywords: ["uber", "lyft", "taxi", "parking", "transit"] },
+  {
+    category: "Bills & Utilities",
+    keywords: ["electric", "water", "gas bill", "internet", "phone", "utility", "bill"],
+  },
+  { category: "Shopping", keywords: ["amazon", "walmart", "target", "shopping", "store"] },
+  {
+    category: "Entertainment",
+    keywords: ["movie", "theater", "netflix", "spotify", "game", "entertainment"],
+  },
+  { category: "Healthcare", keywords: ["doctor", "pharmacy", "health", "medical"] },
+  { category: "Education", keywords: ["tuition", "school", "course", "education", "bookstore"] },
+  { category: "Travel", keywords: ["flight", "hotel", "airbnb", "travel", "vacation"] },
+  { category: "Rent/Mortgage", keywords: ["rent", "mortgage", "landlord"] },
+  { category: "Insurance", keywords: ["insurance", "premium", "policy"] },
+];
+
+function findMatchingCategory(
+  desc: string,
+  rules: CategorizationRule[],
+): TransactionCategory | undefined {
+  return rules.find(({ keywords }) => keywords.some((keyword) => desc.includes(keyword)))?.category;
+}
+
 function autoCategorize(description: string, type: "expense" | "income"): TransactionCategory {
   // Normalize description to lowercase so matching is case-insensitive.
   const desc = description.toLowerCase();
 
   // Income categorization rules.
   if (type === "income") {
-    if (desc.includes("salary") || desc.includes("payroll") || desc.includes("paycheck")) {
-      return "Salary";
-    }
-
-    if (
-      desc.includes("freelance") ||
-      desc.includes("contract") ||
-      desc.includes("client payment")
-    ) {
-      return "Freelance";
-    }
-
-    if (
-      desc.includes("dividend") ||
-      desc.includes("interest") ||
-      desc.includes("stock") ||
-      desc.includes("investment")
-    ) {
-      return "Investment";
-    }
-
-    // Default category for income if no known keywords match.
-    return "Other";
+    return findMatchingCategory(desc, INCOME_CATEGORIZATION_RULES) ?? "Other";
   }
 
   // Expense categorization rules.
-
-  if (
-    desc.includes("restaurant") ||
-    desc.includes("cafe") ||
-    desc.includes("coffee") ||
-    desc.includes("food") ||
-    desc.includes("pizza") ||
-    desc.includes("burger")
-  ) {
-    return "Food & Dining";
-  }
-
-  if (
-    desc.includes("grocery") ||
-    desc.includes("groceries") ||
-    desc.includes("supermarket") ||
-    desc.includes("market")
-  ) {
-    return "Groceries";
-  }
-
-  if (desc.includes("gas") || desc.includes("fuel")) {
-    return "Gas";
-  }
-
-  if (
-    desc.includes("uber") ||
-    desc.includes("lyft") ||
-    desc.includes("taxi") ||
-    desc.includes("parking") ||
-    desc.includes("transit")
-  ) {
-    return "Transportation";
-  }
-
-  if (
-    desc.includes("electric") ||
-    desc.includes("water") ||
-    desc.includes("gas bill") ||
-    desc.includes("internet") ||
-    desc.includes("phone") ||
-    desc.includes("utility") ||
-    desc.includes("bill")
-  ) {
-    return "Bills & Utilities";
-  }
-
-  if (
-    desc.includes("amazon") ||
-    desc.includes("walmart") ||
-    desc.includes("target") ||
-    desc.includes("shopping") ||
-    desc.includes("store")
-  ) {
-    return "Shopping";
-  }
-
-  if (
-    desc.includes("movie") ||
-    desc.includes("theater") ||
-    desc.includes("netflix") ||
-    desc.includes("spotify") ||
-    desc.includes("game") ||
-    desc.includes("entertainment")
-  ) {
-    return "Entertainment";
-  }
-
-  if (
-    desc.includes("doctor") ||
-    desc.includes("pharmacy") ||
-    desc.includes("health") ||
-    desc.includes("medical")
-  ) {
-    return "Healthcare";
-  }
-
-  if (
-    desc.includes("tuition") ||
-    desc.includes("school") ||
-    desc.includes("course") ||
-    desc.includes("education") ||
-    desc.includes("bookstore")
-  ) {
-    return "Education";
-  }
-
-  if (
-    desc.includes("flight") ||
-    desc.includes("hotel") ||
-    desc.includes("airbnb") ||
-    desc.includes("travel") ||
-    desc.includes("vacation")
-  ) {
-    return "Travel";
-  }
-
-  if (
-    desc.includes("rent") ||
-    desc.includes("mortgage") ||
-    desc.includes("landlord")
-  ) {
-    return "Rent/Mortgage";
-  }
-
-  if (
-    desc.includes("insurance") ||
-    desc.includes("premium") ||
-    desc.includes("policy")
-  ) {
-    return "Insurance";
-  }
-
-  // Final fallback if no expense keywords matched.
-  return "Other";
+  return findMatchingCategory(desc, EXPENSE_CATEGORIZATION_RULES) ?? "Other";
 }
 
 // fetchTransactions

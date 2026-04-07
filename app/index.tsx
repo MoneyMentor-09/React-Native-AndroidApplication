@@ -26,6 +26,7 @@ import {
     TouchableOpacity,
     useWindowDimensions,
     View,
+    Image,
 } from "react-native";
 
 // SafeAreaView prevents content from overlapping device notch/status bar.
@@ -59,6 +60,8 @@ const DOT_SIZE = 7;
 const DOT_GAP = 12;
 const DOT_STEP = DOT_SIZE + DOT_GAP;
 const ACTIVE_DOT_WIDTH = DOT_SIZE;
+const SLIDE_HORIZONTAL_GUTTER = 22;
+const MAX_SLIDE_CARD_WIDTH = 380;
 
 /**
  * FeatureSlide type
@@ -306,13 +309,18 @@ export default function InitialScreen() {
             extrapolate: "clamp",
         });
 
+        const cardWidth = Math.min(
+            layoutWidth - SLIDE_HORIZONTAL_GUTTER * 2,
+            MAX_SLIDE_CARD_WIDTH
+        );
+
         return (
-            <View style={styles.slide}>
+            <View style={[styles.slide, { width: layoutWidth }]}>
                 <Animated.View
                     style={[
                         styles.cardShell,
                         {
-                            width: layoutWidth - styles.slide.paddingHorizontal * 2,
+                            width: cardWidth,
                             opacity: slideOpacity,
                             transform: [{ scale: slideScale }, { translateY: slideTranslateY }],
                         },
@@ -350,7 +358,7 @@ export default function InitialScreen() {
                 {/* Main branding and intro text */}
                 <View style={styles.header}>
                     <View style={styles.brandBadge}>
-                        <Text style={styles.brandBadgeText}>$</Text>
+                        <Image source={require("../assets/letter-m (1).png")} style={styles.brandImage} />
                     </View>
 
                     <Text style={styles.logoText}>Money Mentor</Text>
@@ -508,13 +516,14 @@ const styles = StyleSheet.create({
 
     // Blue logo block used as a temporary Money Mentor brand mark.
     brandBadge: {
-        width: 52,
-        height: 52,
+        width: 75,
+        height: 75,
         borderRadius: 16,
         backgroundColor: "#1D4ED8",
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 10,
+        marginTop: 10,
         shadowColor: "#1D4ED8",
         shadowOpacity: 0.2,
         shadowRadius: 10,
@@ -522,23 +531,22 @@ const styles = StyleSheet.create({
         elevation: 3,
     },
 
-    brandBadgeText: {
-        color: "#FFFFFF",
-        fontSize: 24,
-        fontWeight: "800",
-    },
+     brandImage: {
+    width: 74,
+    height: 74,
+  },    
 
     logoText: {
         color: "#0F172A",
-        fontSize: 28,
+        fontSize: 40,
         fontWeight: "800",
         letterSpacing: -0.4,
-        marginBottom: 10,
+        marginBottom: 8,
     },
 
     heroTitle: {
         color: "#0F172A",
-        fontSize: 30,
+        fontSize: 22,
         lineHeight: 36,
         fontWeight: "800",
         textAlign: "center",
@@ -548,8 +556,8 @@ const styles = StyleSheet.create({
 
     heroSubtitle: {
         color: "#475569",
-        fontSize: 16,
-        lineHeight: 24,
+        fontSize: 15,
+        lineHeight: 22,
         textAlign: "center",
         maxWidth: 340,
     },
@@ -557,23 +565,27 @@ const styles = StyleSheet.create({
     // Main middle section that holds the carousel.
     contentSection: {
         flex: 1,
-        justifyContent: "center",
+        justifyContent: "flex-start",
+        paddingTop: 18,
     },
 
     // Each slide takes up the full device width.
     slide: {
-        paddingHorizontal: 22,
+        paddingHorizontal: SLIDE_HORIZONTAL_GUTTER,
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "flex-start",
+        paddingTop: 18,
+        paddingBottom: 20,
     },
 
     // The large rounded white card for each feature.
     cardShell: {
         width: "86%",
-        minHeight: 470,
+        minHeight: 420,
         borderRadius: 30,
-        paddingHorizontal: 28,
-        paddingVertical: 34,
+        paddingHorizontal: 24,
+        paddingTop: 26,
+        paddingBottom: 28,
         alignItems: "center",
         justifyContent: "flex-start",
         backgroundColor: "#FFFFFF",
@@ -588,30 +600,30 @@ const styles = StyleSheet.create({
 
     // Colored icon box at the top of each card.
     iconWrap: {
-        width: 96,
-        height: 96,
-        borderRadius: 24,
+        width: 84,
+        height: 84,
+        borderRadius: 22,
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: 26,
+        marginBottom: 20,
     },
 
     slideTitle: {
         color: "#0F172A",
-        fontSize: 28,
-        lineHeight: 34,
+        fontSize: 25,
+        lineHeight: 30,
         fontWeight: "800",
         textAlign: "center",
-        marginBottom: 18,
+        marginBottom: 14,
         letterSpacing: -0.4,
     },
 
     slideDescription: {
         color: "#475569",
-        fontSize: 17,
-        lineHeight: 28,
+        fontSize: 14,
+        lineHeight: 22,
         textAlign: "center",
-        maxWidth: 280,
+        maxWidth: 270,
     },
 
     // Container for the pagination dots.
@@ -620,7 +632,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         alignSelf: "center",
         position: "relative",
-        marginTop: 24,
+        marginTop: 20,
         marginBottom: 18,
     },
 
@@ -656,7 +668,7 @@ const styles = StyleSheet.create({
         flexWrap: "wrap",
         justifyContent: "center",
         gap: 8,
-        marginBottom: 18,
+        marginBottom: 15,
     },
 
     previewChip: {
