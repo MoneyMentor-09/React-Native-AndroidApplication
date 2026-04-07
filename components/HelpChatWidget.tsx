@@ -19,7 +19,13 @@ import {
 } from "../lib/ai";
 
 function createId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const secureId = globalThis.crypto?.randomUUID?.();
+
+  if (!secureId) {
+    throw new Error("Secure random UUID generation is unavailable in this runtime.");
+  }
+
+  return secureId;
 }
 
 const starterMessage: ChatMessage = {
