@@ -73,7 +73,7 @@ type DashboardMetrics = {
 };
 
 type RangePreset = "week" | "month" | "quarter" | "year";
-type QuickRangePreset = "last_7_days" | "last_30_days" | "this_month" | "last_month" | "year_to_date" | "all_time";
+type QuickRangePreset = "this_week" | "this_month" | "year_to_date" | "all_time";
 
 type MonthStripItem = {
   key: string;
@@ -106,10 +106,8 @@ type SpendingForecast = {
  */
 const CHART_COLORS = ["#2563EB", "#0F766E", "#EA580C", "#7C3AED", "#DC2626"];
 const QUICK_RANGE_OPTIONS: Array<{ key: QuickRangePreset; label: string }> = [
-  { key: "last_7_days", label: "Last 7 Days" },
-  { key: "last_30_days", label: "Last 30 Days" },
+  { key: "this_week", label: "This Week" },
   { key: "this_month", label: "This Month" },
-  { key: "last_month", label: "Last Month" },
   { key: "year_to_date", label: "Year to Date" },
   { key: "all_time", label: "All Time" },
 ];
@@ -228,16 +226,13 @@ function getQuickPresetRange(preset: QuickRangePreset, baseDate = new Date()) {
   const normalizedBaseDate = new Date(baseDate);
   normalizedBaseDate.setHours(0, 0, 0, 0);
 
-  if (preset === "last_7_days") {
+  if (preset === "this_week") {
+    const currentDay = normalizedBaseDate.getDay();
     const startDate = new Date(normalizedBaseDate);
-    startDate.setDate(normalizedBaseDate.getDate() - 6);
-    return { startDate, endDate: normalizedBaseDate };
-  }
-
-  if (preset === "last_30_days") {
-    const startDate = new Date(normalizedBaseDate);
-    startDate.setDate(normalizedBaseDate.getDate() - 29);
-    return { startDate, endDate: normalizedBaseDate };
+    startDate.setDate(normalizedBaseDate.getDate() - currentDay);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    return { startDate, endDate };
   }
 
   if (preset === "this_month") {
@@ -247,16 +242,14 @@ function getQuickPresetRange(preset: QuickRangePreset, baseDate = new Date()) {
     return { startDate, endDate };
   }
 
-  if (preset === "last_month") {
-    const startDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth() - 1, 1);
-    const endDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth(), 0);
-    endDate.setHours(0, 0, 0, 0);
-    return { startDate, endDate };
-  }
-
   if (preset === "year_to_date") {
     const startDate = new Date(normalizedBaseDate.getFullYear(), 0);
-    const endDate = new Date(normalizedBaseDate.getFullYear(), 11, 31);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isCurrentYear = normalizedBaseDate.getFullYear() === today.getFullYear();
+    const endDate = isCurrentYear
+      ? today
+      : new Date(normalizedBaseDate.getFullYear(), 11, 31);
     endDate.setHours(0, 0, 0, 0);
     return { startDate, endDate };
   }
@@ -327,16 +320,10 @@ function shiftRange(startDate: Date, endDate: Date, preset: RangePreset | "custo
 }
 
 function shiftQuickPresetRange(preset: QuickRangePreset, endDate: Date, direction: 1 | -1) {
-  if (preset === "last_7_days") {
+  if (preset === "this_week") {
     const nextEndDate = new Date(endDate);
     nextEndDate.setDate(nextEndDate.getDate() + direction * 7);
-    return getQuickPresetRange("last_7_days", nextEndDate);
-  }
-
-  if (preset === "last_30_days") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setDate(nextEndDate.getDate() + direction * 30);
-    return getQuickPresetRange("last_30_days", nextEndDate);
+    return getQuickPresetRange("this_week", nextEndDate);
   }
 
   if (preset === "this_month") {
@@ -345,15 +332,13 @@ function shiftQuickPresetRange(preset: QuickRangePreset, endDate: Date, directio
     return getQuickPresetRange("this_month", nextEndDate);
   }
 
-  if (preset === "last_month") {
-    const nextAnchorDate = new Date(endDate);
-    nextAnchorDate.setMonth(nextAnchorDate.getMonth() + direction);
-    return getQuickPresetRange("last_month", nextAnchorDate);
+  if (preset === "year_to_date") {
+    const nextEndDate = new Date(endDate);
+    nextEndDate.setFullYear(nextEndDate.getFullYear() + direction);
+    return getQuickPresetRange("year_to_date", nextEndDate);
   }
 
-  const nextEndDate = new Date(endDate);
-  nextEndDate.setFullYear(nextEndDate.getFullYear() + direction);
-  return getQuickPresetRange("year_to_date", nextEndDate);
+  return getQuickPresetRange("all_time", endDate);
 }
 
 function buildMonthStripItems(
@@ -887,11 +872,13 @@ export default function DashboardScreen() {
   }
 
   // Derive dashboard-ready summary values from the raw transactions.
-  const rangeLabel = formatRangeLabel(startDate, endDate);
+  const isAllTimeRange = selectedQuickRange === "all_time";
+  const rangeLabel = isAllTimeRange ? "All Time" : formatRangeLabel(startDate, endDate);
   const metrics = buildDashboardMetrics(transactions, startDate, endDate);
   const spendingForecast = buildCurrentMonthExpenseForecast(transactions);
   const activePreset = getActivePreset(startDate, endDate);
   const isCustomRange = selectedQuickRange === null && activePreset === "custom";
+  const overviewHint = isAllTimeRange ? "Tap to choose a different range" : "Swipe charts to browse periods";
   const comparisonMax = Math.max(metrics.periodExpenseTotal, metrics.periodIncomeTotal, 1);
   const expenseBarHeight = Math.max(
     (metrics.periodExpenseTotal / comparisonMax) * 88,
@@ -1003,9 +990,13 @@ export default function DashboardScreen() {
     >
       <View style={styles.overviewSection}>
         <View style={styles.overviewDateRow}>
-          <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(-1)}>
-            <Ionicons name="chevron-back" size={18} color="#334155" />
-          </Pressable>
+          {!isAllTimeRange ? (
+            <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(-1)}>
+              <Ionicons name="chevron-back" size={18} color="#334155" />
+            </Pressable>
+          ) : (
+            <View style={styles.periodArrowSpacer} />
+          )}
 
           <Pressable style={styles.overviewDateCenter} onPress={openRangeModal}>
             <View style={styles.rangeLabelRow}>
@@ -1019,13 +1010,17 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.overviewHintRow}>
               <Ionicons name="swap-horizontal-outline" size={13} color="#94A3B8" />
-              <Text style={styles.overviewHintText}>Swipe charts to browse periods</Text>
+              <Text style={styles.overviewHintText}>{overviewHint}</Text>
             </View>
           </Pressable>
 
-          <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(1)}>
-            <Ionicons name="chevron-forward" size={18} color="#334155" />
-          </Pressable>
+          {!isAllTimeRange ? (
+            <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(1)}>
+              <Ionicons name="chevron-forward" size={18} color="#334155" />
+            </Pressable>
+          ) : (
+            <View style={styles.periodArrowSpacer} />
+          )}
         </View>
 
         <View style={styles.comparisonCard}>
@@ -1510,6 +1505,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
+  },
+
+  periodArrowSpacer: {
+    width: 38,
+    height: 38,
   },
 
   // Center stack for the selected range and helper copy.
