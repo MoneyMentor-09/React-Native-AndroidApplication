@@ -31,6 +31,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  type DimensionValue,
   Easing,
   Modal,
   Platform,
@@ -222,7 +223,10 @@ function getPresetRange(preset: RangePreset, baseDate = new Date()) {
   return { startDate, endDate };
 }
 
-function getQuickPresetRange(preset: QuickRangePreset, baseDate = new Date()) {
+function getQuickPresetRange(
+  preset: QuickRangePreset,
+  baseDate = new Date(),
+): { startDate: Date; endDate: Date } {
   const normalizedBaseDate = new Date(baseDate);
   normalizedBaseDate.setHours(0, 0, 0, 0);
 
@@ -259,6 +263,8 @@ function getQuickPresetRange(preset: QuickRangePreset, baseDate = new Date()) {
     const endDate = normalizedBaseDate;
     return { startDate, endDate };
   }
+
+  return { startDate: normalizedBaseDate, endDate: normalizedBaseDate };
 }
 
 function isSameDay(left: Date, right: Date): boolean {
@@ -894,10 +900,10 @@ export default function DashboardScreen() {
     spendingForecast?.expectedToDate ?? 0,
     1,
   );
-  const actualProgressWidth = spendingForecast
+  const actualProgressWidth: DimensionValue = spendingForecast
     ? `${Math.max((spendingForecast.actualToDate / forecastMax) * 100, spendingForecast.actualToDate > 0 ? 6 : 0)}%`
     : "0%";
-  const predictedProgressWidth = spendingForecast
+  const predictedProgressWidth: DimensionValue = spendingForecast
     ? `${Math.max((spendingForecast.predictedTotal / forecastMax) * 100, spendingForecast.predictedTotal > 0 ? 6 : 0)}%`
     : "0%";
   const openRangeModal = () => {
