@@ -73,7 +73,7 @@ type DashboardMetrics = {
 };
 
 type RangePreset = "week" | "month" | "quarter" | "year";
-type QuickRangePreset = "last_7_days" | "last_30_days" | "this_month" | "last_month" | "year_to_date";
+type QuickRangePreset = "last_7_days" | "last_30_days" | "this_month" | "last_month" | "year_to_date" | "all_time";
 
 type MonthStripItem = {
   key: string;
@@ -111,6 +111,7 @@ const QUICK_RANGE_OPTIONS: Array<{ key: QuickRangePreset; label: string }> = [
   { key: "this_month", label: "This Month" },
   { key: "last_month", label: "Last Month" },
   { key: "year_to_date", label: "Year to Date" },
+  { key: "all_time", label: "All Time" },
 ];
 
 /**
@@ -240,7 +241,10 @@ function getQuickPresetRange(preset: QuickRangePreset, baseDate = new Date()) {
   }
 
   if (preset === "this_month") {
-    return getPresetRange("month", normalizedBaseDate);
+    const startDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth(), 1);
+    const endDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth() + 1, 0);
+    endDate.setHours(0, 0, 0, 0);
+    return { startDate, endDate };
   }
 
   if (preset === "last_month") {
@@ -250,7 +254,18 @@ function getQuickPresetRange(preset: QuickRangePreset, baseDate = new Date()) {
     return { startDate, endDate };
   }
 
-  return getPresetRange("year", normalizedBaseDate);
+  if (preset === "year_to_date") {
+    const startDate = new Date(normalizedBaseDate.getFullYear(), 0);
+    const endDate = new Date(normalizedBaseDate.getFullYear(), 11, 31);
+    endDate.setHours(0, 0, 0, 0);
+    return { startDate, endDate };
+  }
+
+  if (preset === "all_time") {
+    const startDate = new Date(1900, 0, 1);
+    const endDate = normalizedBaseDate;
+    return { startDate, endDate };
+  }
 }
 
 function isSameDay(left: Date, right: Date): boolean {
