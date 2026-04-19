@@ -1,4 +1,3 @@
-// import { supabase } from "./supabase"; // FUTURE AI: uncomment when re-enabling Supabase Edge Function calls
 import { fetchTransactions, type Transaction } from "./transactions";
 
 export type ChatRole = "user" | "assistant";
@@ -64,6 +63,9 @@ export const QUICK_QUESTIONS: QuickQuestion[] = [
   },
 ];
 
+// Paste the Codespaces backend URL here.
+const BACKEND_URL = "https://zany-funicular-974v7r954qrj24q7-3001.app.github.dev";
+
 function formatMoney(amount: number): string {
   return `$${Math.abs(amount).toFixed(2)}`;
 }
@@ -90,130 +92,83 @@ function buildTransactionContext(transactions: Transaction[]) {
 
   const recentTransactions = [...transactions]
     .sort((a, b) => safeDate(b.created_at) - safeDate(a.created_at))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((t) => ({
+      id: t.id,
+      description: t.description || "No description",
+      amount: Math.abs(Number(t.amount) || 0),
+      type: t.type || "unknown",
+      category: t.category?.trim() || "Uncategorized",
+      date: t.date || "No date",
+      created_at: t.created_at || "",
+    }));
 
   for (const t of transactions) {
     const transactionDate = t.date ?? "";
+    const numericAmount = Math.abs(Number(t.amount) || 0);
 
     if (transactionDate.startsWith(currentMonthKey)) {
       if (t.type === "income") {
-        monthlyIncome += Math.abs(Number(t.amount) || 0);
+        monthlyIncome += numericAmount;
       } else {
-        monthlyExpenses += Math.abs(Number(t.amount) || 0);
+        monthlyExpenses += numericAmount;
       }
     }
 
     if (t.type === "expense") {
       const category = t.category?.trim() || "Uncategorized";
-      categoryTotals[category] =
-        (categoryTotals[category] || 0) + Math.abs(Number(t.amount) || 0);
+      categoryTotals[category] = (categoryTotals[category] || 0) + numericAmount;
     }
   }
 
   const topCategories = Object.entries(categoryTotals)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+    .slice(0, 3)
+    .map(([category, total]) => ({
+      category,
+      total,
+      formattedTotal: formatMoney(total),
+    }));
 
   return {
-    monthlyIncome,
-    monthlyExpenses,
-    monthlyNet: monthlyIncome - monthlyExpenses,
-    totalTransactions: transactions.length,
-    recentTransactions,
+    summary: {
+      monthlyIncome,
+      monthlyExpenses,
+      monthlyNet: monthlyIncome - monthlyExpenses,
+      formattedMonthlyIncome: formatMoney(monthlyIncome),
+      formattedMonthlyExpenses: formatMoney(monthlyExpenses),
+      formattedMonthlyNet: formatMoney(monthlyIncome - monthlyExpenses),
+      totalTransactions: transactions.length,
+    },
     topCategories,
+    recentTransactions,
   };
 }
 
 export async function getHelpResponse(question: string): Promise<string> {
   const transactions = await fetchTransactions();
-  const context = buildTransactionContext(transactions);
-  const q = question.trim().toLowerCase();
+  const financialContext = buildTransactionContext(transactions);
 
-  if (q.includes("what is a budget")) {
-    return "A budget is a plan for how you use your money. It helps you track income, control spending, and make sure you have enough for bills, savings, and goals.";
+  const response = await fetch(`${BACKEND_URL}/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: question,
+      financialContext,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.error || "Failed to get AI response.");
   }
 
-  if (q.includes("how much did i spend this month")) {
-    return `So far this month, you have spent ${formatMoney(context.monthlyExpenses)}.`;
+  if (!data?.reply || typeof data.reply !== "string") {
+    throw new Error("Backend returned an invalid AI response.");
   }
 
-  if (q.includes("what did i earn this month")) {
-    return `So far this month, you have earned ${formatMoney(context.monthlyIncome)}.`;
-  }
-
-  if (q.includes("what am i spending the most on")) {
-    if (context.topCategories.length === 0) {
-      return "I could not find enough expense category data yet to show your top spending categories.";
-    }
-
-    const lines = context.topCategories
-      .map(
-        ([category, total], index) =>
-          `${index + 1}. ${category}: ${formatMoney(total)}`
-      )
-      .join("\n");
-
-    return `Your top spending categories are:\n${lines}`;
-  }
-
-  if (q.includes("show recent transactions")) {
-    if (context.recentTransactions.length === 0) {
-      return "I could not find any recent transactions yet.";
-    }
-
-    const lines = context.recentTransactions
-      .map((t) => {
-        const description = t.description || "No description";
-        const amount = formatMoney(Number(t.amount) || 0);
-        const date = t.date || "No date";
-        return `• ${description} — ${amount} on ${date}`;
-      })
-      .join("\n");
-
-    return `Here are your most recent transactions:\n${lines}`;
-  }
-
-  if (q.includes("50/30/20")) {
-    return "The 50/30/20 rule is a simple budgeting method: about 50% of income goes to needs, 30% to wants, and 20% to savings or debt payoff.";
-  }
-
-  if (q.includes("how can i save more money")) {
-    return "A good way to save more is to track your biggest spending categories, cut one non-essential expense, and move a set amount into savings each payday.";
-  }
-
-  if (q.includes("emergency savings")) {
-    return "A common goal is to build an emergency fund that covers 3 to 6 months of essential expenses. Starting with a smaller goal like $500 or $1,000 is also a great first step.";
-  }
-
-  if (q.includes("am i spending more than i make")) {
-    if (context.monthlyExpenses > context.monthlyIncome) {
-      return `Right now, your monthly spending (${formatMoney(
-        context.monthlyExpenses
-      )}) is higher than your monthly income (${formatMoney(
-        context.monthlyIncome
-      )}).`;
-    }
-
-    return `Right now, your monthly income (${formatMoney(
-      context.monthlyIncome
-    )}) is higher than your monthly spending (${formatMoney(
-      context.monthlyExpenses
-    )}).`;
-  }
-
-  if (q.includes("3 budgeting tips")) {
-    return `Here are 3 budgeting tips:
-1. Review your spending every week.
-2. Set a limit for your biggest spending category.
-3. Save a small fixed amount each month before spending on extras.`;
-  }
-
-  return "I can help with budgeting basics, recent transactions, monthly spending, income, and savings tips.";
+  return data.reply;
 }
-
-/*
-Future AI integration can be added back later by:
-- uncommenting the supabase import
-- sending question + transaction context to a Supabase Edge Function
-- swapping getHelpResponse() in the widget back to askFinanceAssistant()
-*/
