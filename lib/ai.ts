@@ -63,7 +63,8 @@ export const QUICK_QUESTIONS: QuickQuestion[] = [
   },
 ];
 
-// Paste the Codespaces backend URL here.
+// Paste your current Codespaces forwarded URL here.
+// Example: const BACKEND_URL = "https://your-name-3001.app.github.dev";
 const BACKEND_URL = "https://zany-funicular-974v7r954qrj24q7-3001.app.github.dev";
 
 function formatMoney(amount: number): string {
@@ -97,6 +98,7 @@ function buildTransactionContext(transactions: Transaction[]) {
       id: t.id,
       description: t.description || "No description",
       amount: Math.abs(Number(t.amount) || 0),
+      formattedAmount: formatMoney(Number(t.amount) || 0),
       type: t.type || "unknown",
       category: t.category?.trim() || "Uncategorized",
       date: t.date || "No date",
@@ -160,7 +162,16 @@ export async function getHelpResponse(question: string): Promise<string> {
     }),
   });
 
-  const data = await response.json();
+  const rawText = await response.text();
+
+  let data: any = null;
+
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch (error) {
+    console.error("Failed to parse backend response:", rawText);
+    throw new Error("Backend returned invalid JSON.");
+  }
 
   if (!response.ok) {
     throw new Error(data?.error || "Failed to get AI response.");
