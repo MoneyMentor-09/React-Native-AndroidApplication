@@ -178,33 +178,12 @@ export default function AlertsScreen() {
         }
     }
 
-    
-
-
     /* Refresh whenever screen opens */
     useFocusEffect(
         useCallback(() => {
             fetchAlerts();
         }, [])
     );
-
-
-    /* Filtering Logic */
-    const filteredTransactions = transactions.filter(tx => {
-        const searchLower = search.toLowerCase();
-
-        const matchSearch =
-            searchLower === "" ||
-            tx.description.toLowerCase().includes(searchLower) ||
-            (tx.category?.toLowerCase().includes(searchLower) ?? false);
-
-        const matchType = filterType === "all" || tx.type === filterType;
-
-        const matchCategory =
-            filterCategory === "all" || (tx.category ?? "").toLowerCase() === filterCategory.toLowerCase();
-
-        return matchSearch && matchType && matchCategory;
-    });
 
     const filteredAlerts = alerts
         .filter((alert) => {
@@ -228,56 +207,6 @@ export default function AlertsScreen() {
             }
             return a.read ? 1 : -1
         })
-
-
-    /* Transaction Row */
-
-    const handleEditTransaction = (transaction: Transaction) => {
-
-        setEditingTransaction(transaction);
-
-        setEditDescription(transaction.description);
-        setEditAmount(Math.abs(transaction.amount).toString());
-        setEditCategory(transaction.category);
-        setEditType(transaction.type);
-
-        setEditModalVisible(true);
-
-    };
-
-    const updateTransaction = async () => {
-
-        if (!editingTransaction) return;
-
-        try {
-
-            const supabase = getSupabaseBrowserClient();
-
-            let value = Number.parseFloat(editAmount);
-
-            if (editType === "expense") {
-                value = -Math.abs(value);
-            } else {
-                value = Math.abs(value);
-            }
-
-            await supabase
-                .from("transactions")
-                .update({
-                    description: editDescription,
-                    amount: value,
-                    category: editCategory,
-                    type: editType
-                })
-                .eq("id", editingTransaction.id);
-
-            setEditModalVisible(false);
-
-        } catch (err) {
-            console.log(err);
-        }
-
-    };
 
     // Add read handler
     const handleReadAlert = async(alertId: string) => {
@@ -431,16 +360,6 @@ export default function AlertsScreen() {
 
     };
 
-    const getAlertColor = (type: string, riskScore: number) => {
-        if (type === "fraud" || riskScore > 70) {
-            return "#ff8080"
-        } else if (riskScore > 30) {
-            return "#ffb080"
-        } else {
-            return "#ffff80"
-        }
-    }
-
     return (
 
         <TouchableWithoutFeedback
@@ -467,25 +386,6 @@ export default function AlertsScreen() {
                         <Text>Total Alerts</Text>
                     </View>
                 </View>
-
-                {/* SEARCH */}
-                <TouchableWithoutFeedback
-                    onPress={() => {
-                        setSelectedTransactions([]);
-                        Keyboard.dismiss();
-                    }}
-                >
-                    <View style={{ marginTop: 0 }}>
-
-                        <TextInput
-                            placeholder="Search alerts..."
-                            style={styles.search}
-                            value={search}
-                            onChangeText={setSearch}
-                        />
-                    </View>
-
-                </TouchableWithoutFeedback>
 
                 {/* FILTER TYPE */}
 
@@ -569,8 +469,6 @@ export default function AlertsScreen() {
     );
 
 }
-
-
 
 /* Styles */
 
