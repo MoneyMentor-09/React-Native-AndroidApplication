@@ -1,0 +1,4 @@
+{
+    "trivy.secretScanning": true,
+    "trivy.useIgnoreFile": false
+}
