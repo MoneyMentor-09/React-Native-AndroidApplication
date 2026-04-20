@@ -31,6 +31,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  type DimensionValue,
   Easing,
   Modal,
   Platform,
@@ -73,7 +74,7 @@ type DashboardMetrics = {
 };
 
 type RangePreset = "week" | "month" | "quarter" | "year";
-type QuickRangePreset = "last_7_days" | "last_30_days" | "this_month" | "last_month" | "year_to_date";
+type QuickRangePreset = "this_week" | "this_month" | "year_to_date" | "all_time";
 
 type MonthStripItem = {
   key: string;
@@ -85,6 +86,19 @@ type MonthStripItem = {
   endDate: Date;
 };
 
+type SpendingForecast = {
+  predictedTotal: number;
+  actualToDate: number;
+  expectedToDate: number;
+  elapsedRatio: number;
+  daysElapsed: number;
+  daysInMonth: number;
+  sampleSize: number;
+  monthLabel: string;
+  asOfLabel: string;
+  trendDirection: "up" | "down" | "flat";
+};
+
 /**
  * CHART_COLORS
  * ------------
@@ -93,11 +107,10 @@ type MonthStripItem = {
  */
 const CHART_COLORS = ["#2563EB", "#0F766E", "#EA580C", "#7C3AED", "#DC2626"];
 const QUICK_RANGE_OPTIONS: Array<{ key: QuickRangePreset; label: string }> = [
-  { key: "last_7_days", label: "Last 7 Days" },
-  { key: "last_30_days", label: "Last 30 Days" },
+  { key: "this_week", label: "This Week" },
   { key: "this_month", label: "This Month" },
-  { key: "last_month", label: "Last Month" },
   { key: "year_to_date", label: "Year to Date" },
+  { key: "all_time", label: "All Time" },
 ];
 
 /**
@@ -210,34 +223,48 @@ function getPresetRange(preset: RangePreset, baseDate = new Date()) {
   return { startDate, endDate };
 }
 
-function getQuickPresetRange(preset: QuickRangePreset, baseDate = new Date()) {
+function getQuickPresetRange(
+  preset: QuickRangePreset,
+  baseDate = new Date(),
+): { startDate: Date; endDate: Date } {
   const normalizedBaseDate = new Date(baseDate);
   normalizedBaseDate.setHours(0, 0, 0, 0);
 
-  if (preset === "last_7_days") {
+  if (preset === "this_week") {
+    const currentDay = normalizedBaseDate.getDay();
     const startDate = new Date(normalizedBaseDate);
-    startDate.setDate(normalizedBaseDate.getDate() - 6);
-    return { startDate, endDate: normalizedBaseDate };
-  }
-
-  if (preset === "last_30_days") {
-    const startDate = new Date(normalizedBaseDate);
-    startDate.setDate(normalizedBaseDate.getDate() - 29);
-    return { startDate, endDate: normalizedBaseDate };
+    startDate.setDate(normalizedBaseDate.getDate() - currentDay);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    return { startDate, endDate };
   }
 
   if (preset === "this_month") {
-    return getPresetRange("month", normalizedBaseDate);
-  }
-
-  if (preset === "last_month") {
-    const startDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth() - 1, 1);
-    const endDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth(), 0);
+    const startDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth(), 1);
+    const endDate = new Date(normalizedBaseDate.getFullYear(), normalizedBaseDate.getMonth() + 1, 0);
     endDate.setHours(0, 0, 0, 0);
     return { startDate, endDate };
   }
 
-  return getPresetRange("year", normalizedBaseDate);
+  if (preset === "year_to_date") {
+    const startDate = new Date(normalizedBaseDate.getFullYear(), 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isCurrentYear = normalizedBaseDate.getFullYear() === today.getFullYear();
+    const endDate = isCurrentYear
+      ? today
+      : new Date(normalizedBaseDate.getFullYear(), 11, 31);
+    endDate.setHours(0, 0, 0, 0);
+    return { startDate, endDate };
+  }
+
+  if (preset === "all_time") {
+    const startDate = new Date(1900, 0, 1);
+    const endDate = normalizedBaseDate;
+    return { startDate, endDate };
+  }
+
+  return { startDate: normalizedBaseDate, endDate: normalizedBaseDate };
 }
 
 function isSameDay(left: Date, right: Date): boolean {
@@ -261,23 +288,23 @@ function getActivePreset(startDate: Date, endDate: Date): RangePreset | "custom"
   return "custom";
 }
 
-function shiftRange(startDate: Date, endDate: Date, preset: RangePreset | "custom", direction: 1 | -1) {
+function shiftRange(endDate: Date, startDate: Date, preset: RangePreset | "custom", direction: 1 | -1) {
   if (preset === "week") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setDate(nextEndDate.getDate() + direction * 7);
-    return getPresetRange("week", nextEndDate);
+    const nextStartDate = new Date(endDate);
+    nextStartDate.setDate(nextStartDate.getDate() + direction * 7);
+    return getPresetRange("week", nextStartDate);
   }
 
   if (preset === "month") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setMonth(nextEndDate.getMonth() + direction);
-    return getPresetRange("month", nextEndDate);
+    const nextStartDate = new Date(endDate);
+    nextStartDate.setMonth(nextStartDate.getMonth() + direction);
+    return getPresetRange("month", nextStartDate);
   }
 
   if (preset === "year") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setFullYear(nextEndDate.getFullYear() + direction);
-    return getPresetRange("year", nextEndDate);
+    const nextStartDate = new Date(endDate);
+    nextStartDate.setFullYear(nextStartDate.getFullYear() + direction);
+    return getPresetRange("year", nextStartDate);
   }
 
   const rangeLengthInDays = Math.max(
@@ -299,16 +326,10 @@ function shiftRange(startDate: Date, endDate: Date, preset: RangePreset | "custo
 }
 
 function shiftQuickPresetRange(preset: QuickRangePreset, endDate: Date, direction: 1 | -1) {
-  if (preset === "last_7_days") {
+  if (preset === "this_week") {
     const nextEndDate = new Date(endDate);
     nextEndDate.setDate(nextEndDate.getDate() + direction * 7);
-    return getQuickPresetRange("last_7_days", nextEndDate);
-  }
-
-  if (preset === "last_30_days") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setDate(nextEndDate.getDate() + direction * 30);
-    return getQuickPresetRange("last_30_days", nextEndDate);
+    return getQuickPresetRange("this_week", nextEndDate);
   }
 
   if (preset === "this_month") {
@@ -317,15 +338,13 @@ function shiftQuickPresetRange(preset: QuickRangePreset, endDate: Date, directio
     return getQuickPresetRange("this_month", nextEndDate);
   }
 
-  if (preset === "last_month") {
-    const nextAnchorDate = new Date(endDate);
-    nextAnchorDate.setMonth(nextAnchorDate.getMonth() + direction);
-    return getQuickPresetRange("last_month", nextAnchorDate);
+  if (preset === "year_to_date") {
+    const nextEndDate = new Date(endDate);
+    nextEndDate.setFullYear(nextEndDate.getFullYear() + direction);
+    return getQuickPresetRange("year_to_date", nextEndDate);
   }
 
-  const nextEndDate = new Date(endDate);
-  nextEndDate.setFullYear(nextEndDate.getFullYear() + direction);
-  return getQuickPresetRange("year_to_date", nextEndDate);
+  return getQuickPresetRange("all_time", endDate);
 }
 
 function buildMonthStripItems(
@@ -369,6 +388,132 @@ function buildMonthStripItems(
       endDate,
     };
   });
+}
+
+function getMonthExpenseTotal(
+  transactions: Transaction[],
+  year: number,
+  month: number,
+  throughDay?: number,
+): number {
+  let total = 0;
+
+  for (const tx of transactions) {
+    if (tx.type === "income") {
+      continue;
+    }
+
+    const txDate = new Date(tx.date);
+
+    if (
+      Number.isNaN(txDate.getTime()) ||
+      txDate.getFullYear() !== year ||
+      txDate.getMonth() !== month ||
+      (throughDay !== undefined && txDate.getDate() > throughDay)
+    ) {
+      continue;
+    }
+
+    total += Math.abs(tx.amount);
+  }
+
+  return total;
+}
+
+function predictNextValueWithLinearRegression(values: number[]): number | null {
+  if (values.length < 2) {
+    return null;
+  }
+
+  const n = values.length;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumXX = 0;
+
+  for (let index = 0; index < n; index += 1) {
+    const x = index + 1;
+    const y = values[index];
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumXX += x * x;
+  }
+
+  const denominator = n * sumXX - sumX * sumX;
+
+  if (denominator === 0) {
+    return null;
+  }
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+  const nextValue = intercept + slope * (n + 1);
+
+  return Math.max(nextValue, 0);
+}
+
+function buildCurrentMonthExpenseForecast(
+  transactions: Transaction[],
+  baseDate = new Date(),
+  historyMonths = 6,
+): SpendingForecast | null {
+  const today = new Date(baseDate);
+  today.setHours(0, 0, 0, 0);
+
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const daysElapsed = Math.min(today.getDate(), daysInMonth);
+  const elapsedRatio = daysInMonth > 0 ? daysElapsed / daysInMonth : 0;
+
+  const historicalTotals = Array.from({ length: historyMonths }, (_, index) => {
+    const monthDate = new Date(currentYear, currentMonth - (historyMonths - index), 1);
+    return getMonthExpenseTotal(
+      transactions,
+      monthDate.getFullYear(),
+      monthDate.getMonth(),
+    );
+  });
+
+  const predictedTotal = predictNextValueWithLinearRegression(historicalTotals);
+
+  if (predictedTotal === null) {
+    return null;
+  }
+
+  const actualToDate = getMonthExpenseTotal(transactions, currentYear, currentMonth, daysElapsed);
+  const expectedToDate = predictedTotal * elapsedRatio;
+  const previousMonthTotal = historicalTotals[historicalTotals.length - 1] ?? predictedTotal;
+  const delta = predictedTotal - previousMonthTotal;
+  const relativeDelta = previousMonthTotal > 0 ? Math.abs(delta) / previousMonthTotal : 0;
+
+  return {
+    predictedTotal,
+    actualToDate,
+    expectedToDate,
+    elapsedRatio,
+    daysElapsed,
+    daysInMonth,
+    sampleSize: historicalTotals.length,
+    monthLabel: today.toLocaleDateString("en-US", { month: "long" }),
+    asOfLabel: today.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    trendDirection:
+      relativeDelta < 0.03 ? "flat" : delta > 0 ? "up" : "down",
+  };
+}
+
+function getRangeInDays(startDate: Date, endDate: Date): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  return Math.max(
+    1,
+    Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  );
 }
 
 /**
@@ -454,11 +599,8 @@ function buildDashboardMetrics(
   // is still generated so the screen can support that section when enabled.
   let spendingTrend: Array<{ label: string; total: number }> = [];
 
-  const rangeInDays = Math.max(
-    1,
-    Math.ceil((endExclusive.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
-  );
-  const weekCount = Math.ceil(rangeInDays / 7);
+const rangeInDays = getRangeInDays(startDate, endDate);
+const weekCount = Math.ceil(rangeInDays / 7);
 
   spendingTrend = Array.from({ length: weekCount }, (_, index) => {
     const weekStart = new Date(start);
@@ -746,10 +888,13 @@ export default function DashboardScreen() {
   }
 
   // Derive dashboard-ready summary values from the raw transactions.
-  const rangeLabel = formatRangeLabel(startDate, endDate);
+  const isAllTimeRange = selectedQuickRange === "all_time";
+  const rangeLabel = isAllTimeRange ? "All Time" : formatRangeLabel(startDate, endDate);
   const metrics = buildDashboardMetrics(transactions, startDate, endDate);
+  const spendingForecast = buildCurrentMonthExpenseForecast(transactions);
   const activePreset = getActivePreset(startDate, endDate);
   const isCustomRange = selectedQuickRange === null && activePreset === "custom";
+  const overviewHint = isAllTimeRange ? "Tap to choose a different range" : `${getRangeInDays(startDate, endDate)} days, ${metrics.recentTransactions.length} transactions`;
   const comparisonMax = Math.max(metrics.periodExpenseTotal, metrics.periodIncomeTotal, 1);
   const expenseBarHeight = Math.max(
     (metrics.periodExpenseTotal / comparisonMax) * 88,
@@ -759,6 +904,18 @@ export default function DashboardScreen() {
     (metrics.periodIncomeTotal / comparisonMax) * 88,
     metrics.periodIncomeTotal > 0 ? 10 : 6,
   );
+  const forecastMax = Math.max(
+    spendingForecast?.predictedTotal ?? 0,
+    spendingForecast?.actualToDate ?? 0,
+    spendingForecast?.expectedToDate ?? 0,
+    1,
+  );
+  const actualProgressWidth: DimensionValue = spendingForecast
+    ? `${Math.max((spendingForecast.actualToDate / forecastMax) * 100, spendingForecast.actualToDate > 0 ? 6 : 0)}%`
+    : "0%";
+  const predictedProgressWidth: DimensionValue = spendingForecast
+    ? `${Math.max((spendingForecast.predictedTotal / forecastMax) * 100, spendingForecast.predictedTotal > 0 ? 6 : 0)}%`
+    : "0%";
   const openRangeModal = () => {
     setDraftStartDate(startDate);
     setDraftEndDate(endDate);
@@ -824,10 +981,37 @@ export default function DashboardScreen() {
     }
   };
   const handlePeriodShift = (direction: 1 | -1) => {
-    const nextRange =
-      selectedQuickRange !== null
-        ? shiftQuickPresetRange(selectedQuickRange, endDate, direction)
-        : shiftRange(startDate, endDate, activePreset, direction);
+    const base = new Date(startDate);
+
+    // Normalize to start of month for stability
+    base.setDate(1);
+    base.setHours(0, 0, 0, 0);
+
+    if (selectedQuickRange === "this_month") {
+      base.setMonth(base.getMonth() + direction);
+
+      const nextStart = new Date(base);
+      const nextEnd = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+
+      setStartDate(nextStart);
+      setEndDate(nextEnd);
+      return;
+    }
+
+    if (selectedQuickRange === "this_week") {
+      base.setDate(base.getDate() + direction * 7);
+
+      const nextStart = new Date(base);
+      const nextEnd = new Date(base);
+      nextEnd.setDate(nextStart.getDate() + 6);
+
+      setStartDate(nextStart);
+      setEndDate(nextEnd);
+      return;
+    }
+
+    // fallback (custom range)
+    const nextRange = shiftRange(startDate, endDate, activePreset, direction);
     setStartDate(nextRange.startDate);
     setEndDate(nextRange.endDate);
   };
@@ -849,9 +1033,13 @@ export default function DashboardScreen() {
     >
       <View style={styles.overviewSection}>
         <View style={styles.overviewDateRow}>
-          <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(-1)}>
-            <Ionicons name="chevron-back" size={18} color="#334155" />
-          </Pressable>
+          {!isAllTimeRange ? (
+            <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(-1)}>
+              <Ionicons name="chevron-back" size={18} color="#334155" />
+            </Pressable>
+          ) : (
+            <View style={styles.periodArrowSpacer} />
+          )}
 
           <Pressable style={styles.overviewDateCenter} onPress={openRangeModal}>
             <View style={styles.rangeLabelRow}>
@@ -865,13 +1053,17 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.overviewHintRow}>
               <Ionicons name="swap-horizontal-outline" size={13} color="#94A3B8" />
-              <Text style={styles.overviewHintText}>Swipe charts to browse periods</Text>
+              <Text style={styles.overviewHintText}>{overviewHint}</Text>
             </View>
           </Pressable>
 
-          <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(1)}>
-            <Ionicons name="chevron-forward" size={18} color="#334155" />
-          </Pressable>
+          {!isAllTimeRange ? (
+            <Pressable style={styles.periodArrowButton} onPress={() => handlePeriodShift(1)}>
+              <Ionicons name="chevron-forward" size={18} color="#334155" />
+            </Pressable>
+          ) : (
+            <View style={styles.periodArrowSpacer} />
+          )}
         </View>
 
         <View style={styles.comparisonCard}>
@@ -1184,6 +1376,87 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      {spendingForecast ? (
+        <View style={styles.sectionGroup}>
+          <Text style={styles.breakdownLabel}>Forecast</Text>
+
+          <View style={styles.forecastCard}>
+            <View style={styles.forecastHeader}>
+              <View style={styles.forecastHeaderCopy}>
+                <Text style={styles.forecastTitle}>Predicted vs Actual Spending</Text>
+              </View>
+
+              <View style={styles.forecastBadge}>
+                <Text style={styles.forecastBadgeText}>As of {spendingForecast.asOfLabel}</Text>
+              </View>
+            </View>
+
+            <View style={styles.forecastHeroRow}>
+              <View style={styles.forecastHeroPrimary}>
+                <Text style={styles.forecastValueLabel}>Predicted {spendingForecast.monthLabel} total</Text>
+                <Text style={styles.forecastPrimaryValue}>
+                  {formatCurrency(spendingForecast.predictedTotal)}
+                </Text>
+              </View>
+
+              <View style={styles.forecastHeroTrend}>
+                <Text
+                  style={[
+                    styles.forecastTrendPill,
+                    spendingForecast.trendDirection === "up"
+                      ? styles.forecastTrendPillUp
+                      : spendingForecast.trendDirection === "down"
+                        ? styles.forecastTrendPillDown
+                        : styles.forecastTrendPillFlat,
+                  ]}
+                >
+                  {spendingForecast.trendDirection === "up"
+                    ? "Above last month"
+                    : spendingForecast.trendDirection === "down"
+                      ? "Below last month"
+                      : "Close to last month"}
+                </Text>
+                <Text style={styles.forecastDeltaMeta}>
+                  Day {spendingForecast.daysElapsed} of {spendingForecast.daysInMonth}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.forecastMetricStack}>
+              <View style={styles.forecastMetricCard}>
+                <View style={styles.forecastMetricRow}>
+                  <View style={styles.forecastMetricHeader}>
+                    <View style={[styles.forecastMetricDot, styles.forecastActualDot]} />
+                    <Text style={styles.forecastMetricLabel}>Actual spent so far</Text>
+                  </View>
+                  <Text style={styles.forecastMetricValue}>
+                    {formatCurrency(spendingForecast.actualToDate)}
+                  </Text>
+                </View>
+                <View style={styles.forecastTrack}>
+                  <View style={[styles.forecastFill, styles.forecastActualFill, { width: actualProgressWidth }]} />
+                </View>
+              </View>
+
+              <View style={styles.forecastMetricCard}>
+                <View style={styles.forecastMetricRow}>
+                  <View style={styles.forecastMetricHeader}>
+                    <View style={[styles.forecastMetricDot, styles.forecastPredictedDot]} />
+                    <Text style={styles.forecastMetricLabel}>Predicted month-end</Text>
+                  </View>
+                  <Text style={styles.forecastMetricValue}>
+                    {formatCurrency(spendingForecast.predictedTotal)}
+                  </Text>
+                </View>
+                <View style={styles.forecastTrack}>
+                  <View style={[styles.forecastFill, styles.forecastPredictedFill, { width: predictedProgressWidth }]} />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
     </ScrollView>
   );
 }
@@ -1275,6 +1548,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
+  },
+
+  periodArrowSpacer: {
+    width: 38,
+    height: 38,
   },
 
   // Center stack for the selected range and helper copy.
@@ -1822,6 +2100,187 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginVertical: 4,
+  },
+
+  forecastCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 18,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+
+  forecastHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  forecastHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+
+  forecastTitle: {
+    color: "#0F172A",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  forecastBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+
+  forecastBadgeText: {
+    color: "#1D4ED8",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  forecastHeroRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 16,
+  },
+
+  forecastHeroPrimary: {
+    flex: 1,
+    gap: 4,
+  },
+
+  forecastHeroTrend: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+
+  forecastValueLabel: {
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  forecastPrimaryValue: {
+    color: "#0F172A",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+
+  forecastTrendPill: {
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  forecastTrendPillUp: {
+    backgroundColor: "#FEF2F2",
+    color: "#B91C1C",
+  },
+
+  forecastTrendPillDown: {
+    backgroundColor: "#ECFDF5",
+    color: "#047857",
+  },
+
+  forecastTrendPillFlat: {
+    backgroundColor: "#F1F5F9",
+    color: "#475569",
+  },
+
+  forecastDeltaMeta: {
+    color: "#94A3B8",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  forecastMetricStack: {
+    gap: 12,
+  },
+
+  forecastMetricCard: {
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 10,
+  },
+
+  forecastMetricRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  forecastMetricHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+
+  forecastMetricDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+
+  forecastPredictedDot: {
+    backgroundColor: "#1D4ED8",
+  },
+
+  forecastActualDot: {
+    backgroundColor: "#DC2626",
+  },
+
+  forecastMetricLabel: {
+    color: "#475569",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  forecastMetricValue: {
+    color: "#0F172A",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  forecastTrack: {
+    height: 10,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "#E2E8F0",
+  },
+
+  forecastFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+
+  forecastPredictedFill: {
+    backgroundColor: "#1D4ED8",
+  },
+
+  forecastActualFill: {
+    backgroundColor: "#DC2626",
   },
 
   // Center overlay that turns the pie chart into a readable dashboard donut.
