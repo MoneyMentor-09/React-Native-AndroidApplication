@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,12 +30,13 @@ const starterMessage: ChatMessage = {
   id: "starter",
   role: "assistant",
   content:
-    "Hi! I’m your MoneyMentor help assistant. Tap one of the questions below for budgeting help and transaction insights.",
+    "Hi! I’m your MoneyMentor help assistant. Ask me about spending, income, budgets, savings, or recent transactions.",
 };
 
 export default function HelpChatWidget() {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([starterMessage]);
 
   const quickQuestions = useMemo(() => QUICK_QUESTIONS, []);
@@ -54,6 +56,7 @@ export default function HelpChatWidget() {
 
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
+    setInput("");
 
     try {
       const answer = await getHelpResponse(question);
@@ -79,6 +82,10 @@ export default function HelpChatWidget() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSendPress() {
+    await sendQuestion(input);
   }
 
   function renderMessage({ item }: { item: ChatMessage }) {
@@ -126,7 +133,7 @@ export default function HelpChatWidget() {
               <View>
                 <Text style={styles.headerTitle}>Help Assistant</Text>
                 <Text style={styles.headerSubtitle}>
-                  Quick budgeting help and money tips
+                  Personalized budgeting help and money insights
                 </Text>
               </View>
 
@@ -148,7 +155,7 @@ export default function HelpChatWidget() {
               ListHeaderComponent={
                 <View style={styles.quickQuestionsSection}>
                   <Text style={styles.quickQuestionsTitle}>
-                    Choose a question:
+                    Try a question:
                   </Text>
 
                   <View style={styles.quickQuestionsWrap}>
@@ -175,6 +182,32 @@ export default function HelpChatWidget() {
                 <Text style={styles.loadingText}>Loading response...</Text>
               </View>
             )}
+
+            <View style={styles.inputRow}>
+              <TextInput
+                value={input}
+                onChangeText={setInput}
+                placeholder="Ask about your budget, spending, or savings..."
+                placeholderTextColor="#9CA3AF"
+                style={styles.textInput}
+                editable={!loading}
+                returnKeyType="send"
+                onSubmitEditing={handleSendPress}
+              />
+
+              <Pressable
+                onPress={handleSendPress}
+                style={[
+                  styles.sendButton,
+                  (!input.trim() || loading) && styles.sendButtonDisabled,
+                ]}
+                disabled={!input.trim() || loading}
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
+              >
+                <Ionicons name="send" size={18} color="#FFFFFF" />
+              </Pressable>
+            </View>
           </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
@@ -269,6 +302,7 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingVertical: 8,
     gap: 10,
+    flexGrow: 1,
   },
   messageBubble: {
     maxWidth: "82%",
@@ -304,5 +338,38 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#6B7280",
     fontSize: 13,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    paddingTop: 12,
+    marginTop: 8,
+  },
+  textInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 100,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#111827",
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
 });

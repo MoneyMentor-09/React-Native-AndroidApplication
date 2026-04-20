@@ -88,6 +88,34 @@ export default function BudgetScreen() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [selectedBudgets, setSelectedBudgets] = useState<string[]>([]);
+  const isSelectionMode = selectedBudgets.length > 0;
+
+  const toggleSelectBudget = (id: string) => {
+  setSelectedBudgets(prev => {
+    if (prev.includes(id)) {
+      return prev.filter(b => b !== id);
+    }
+    return [...prev, id];
+  });
+};
+
+const deleteSelectedBudgets = async () => {
+  try {
+    const supabase = getSupabaseBrowserClient();
+
+    await supabase
+      .from("budgets")
+      .delete()
+      .in("id", selectedBudgets);
+
+    setSelectedBudgets([]);
+    fetchData();
+  } catch (err) {
+    console.log("Bulk delete error:", err);
+  }
+};
+
   // For Month/Year dropdowns
   const [monthPopupVisible, setMonthPopupVisible] = useState(false);
   const [yearPopupVisible, setYearPopupVisible] = useState(false);
@@ -134,10 +162,15 @@ export default function BudgetScreen() {
   };
 
   useFocusEffect(
-    useCallback(() => {
-      fetchData();
-    }, [selectedMonth, selectedYear])
-  );
+  useCallback(() => {
+    fetchData();
+
+    return () => {
+      // clears selection when leaving tab/screen
+      setSelectedBudgets([]);
+    };
+  }, [selectedMonth, selectedYear])
+);
 
   /* CALCULATE SPENT */
   const getSpent = (cat: string) =>
@@ -257,7 +290,7 @@ const saveBudget = async () => {
   try {
     const supabase = getSupabaseBrowserClient();
 
-    // ✅ Get user FIRST
+    // Get user FIRST
     const { data } = await supabase.auth.getSession();
     const user = data.session?.user;
     if (!user) return;
@@ -265,7 +298,7 @@ const saveBudget = async () => {
     const parsedAmount = Number.parseFloat(amount) || 0;
     const spent = getSpent(category);
 
-    // ✅ CHECK DUPLICATE FROM DATABASE (NOT STATE)
+    // CHECK DUPLICATE FROM DATABASE (NOT STATE)
     const { data: existingBudget, error: checkError } = await supabase
       .from("budgets")
       .select("id")
@@ -289,7 +322,7 @@ const saveBudget = async () => {
       return;
     }
 
-    // ✅ INSERT OR UPDATE
+    // INSERT OR UPDATE
     if (editingBudget) {
       const { error } = await supabase
         .from("budgets")
@@ -326,7 +359,7 @@ const saveBudget = async () => {
       }
     }
 
-    // ✅ Success
+    // Success
     resetForm();
     fetchData();
   } catch (err) {
@@ -367,65 +400,81 @@ const saveBudget = async () => {
   };
 
   /* RENDER BUDGET CARD */
-  const renderBudget = ({ item }: { item: Budget }) => {
-    const spent = getSpent(item.category);
-    const percentage = item.amount ? Math.min((spent / item.amount) * 100, 100) : 0;
+const renderBudget = ({ item }: { item: Budget }) => {
+  const spent = getSpent(item.category);
+  const percentage = item.amount
+    ? Math.min((spent / item.amount) * 100, 100)
+    : 0;
 
-    return (
-      <View style={styles.card}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.title}>{item.category}</Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Pressable
-              onPress={() => {
-                setEditingBudget(item);
-                setCategory(item.category);
-                setAmount(item.amount.toString());
-                setPurpose(item.purpose || "");
-                
-                const [year, month] = item.month.split("-");
-                  setSelectedYear(Number(year));
-                  setSelectedMonth(Number(month) - 1);
-                setModalVisible(true);
-              }}
-            >
-              <Ionicons name="pencil" size={18} color="#2563EB" />
-            </Pressable>
-            <Pressable onPress={() => confirmDelete(item)}>
-              <Ionicons name="trash" size={18} color="#DC2626" />
-            </Pressable>
-          </View>
-        </View>
+  const selected = selectedBudgets.includes(item.id);
 
-        <Text style={styles.meta}>
-          ${spent.toFixed(2)} / ${item.amount.toFixed(2)}
-        </Text>
+  return (
+    <Pressable
+      style={[
+        styles.card,
+        selected && { borderWidth: 2, borderColor: "#2563EB" }
+      ]}
+      onPress={() => {
+        if (isSelectionMode) {
+          toggleSelectBudget(item.id);
+        } else {
+          // EDIT MODE (same as your pencil icon)
+          setEditingBudget(item);
+          setCategory(item.category);
+          setAmount(item.amount.toString());
+          setPurpose(item.purpose || "");
 
-        <View style={styles.progressBg}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${percentage}%`,
-                backgroundColor:
-                  percentage >= 100
-                    ? "#DC2626"
-                    : percentage >= 90
-                    ? "#F59E0B"
-                    : "#16A34A",
-              },
-            ]}
-          />
-        </View>
+          const [year, month] = item.month.split("-");
+          setSelectedYear(Number(year));
+          setSelectedMonth(Number(month) - 1);
 
-        <Text style={styles.meta}>
-          Remaining: ${(item.amount - spent).toFixed(2)}
-        </Text>
+          setModalVisible(true);
+        }
+      }}
+      onLongPress={() => {
+        toggleSelectBudget(item.id);
+      }}
+    >
+      {/* Header */}
+      <View style={styles.rowBetween}>
+        <Text style={styles.title}>{item.category}</Text>
 
-        {item.purpose && <Text style={styles.purpose}>Purpose: {item.purpose}</Text>}
+        {selected && (
+          <Ionicons name="checkmark-circle" size={20} color="#2563EB" />
+        )}
       </View>
-    );
-  };
+
+      <Text style={styles.meta}>
+        ${spent.toFixed(2)} / ${item.amount.toFixed(2)}
+      </Text>
+
+      <View style={styles.progressBg}>
+        <View
+          style={[
+            styles.progressFill,
+            {
+              width: `${percentage}%`,
+              backgroundColor:
+                percentage >= 100
+                  ? "#DC2626"
+                  : percentage >= 90
+                  ? "#F59E0B"
+                  : "#16A34A",
+            },
+          ]}
+        />
+      </View>
+
+      <Text style={styles.meta}>
+        Remaining: ${(item.amount - spent).toFixed(2)}
+      </Text>
+
+      {item.purpose && (
+        <Text style={styles.purpose}>Purpose: {item.purpose}</Text>
+      )}
+    </Pressable>
+  );
+};
 
   return (
     <View style={styles.container}>
@@ -508,6 +557,7 @@ const saveBudget = async () => {
 
       {/* BUDGET LIST */}
       <FlatList
+      
         data={budgets}
         keyExtractor={(i) => i.id}
         renderItem={renderBudget}
@@ -517,6 +567,23 @@ const saveBudget = async () => {
           </Text>
         }
       />
+            {/* DELETE BAR */}
+      {isSelectionMode && (
+        <View style={styles.deleteBar}>
+          <Text style={styles.deleteText}>
+            {selectedBudgets.length} Selected
+          </Text>
+
+          <Pressable
+            style={styles.deleteSelectedButton}
+            onPress={deleteSelectedBudgets}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700" }}>
+              Delete Selected
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* ADD BUDGET BUTTON */}
       <Pressable
@@ -584,44 +651,7 @@ const saveBudget = async () => {
         </View>
       )}
 
-      {/* Auto Create Budget Modal */}
-      {autoBudgetModalVisible && (
-        <View style={styles.modal}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Auto Create Budget</Text>
-            <Text style={styles.helperText}>
-              Pick a category and we will use up to the 6 most recent budgets in
-              that category to predict this month's amount.
-            </Text>
-
-            <Pressable
-              style={styles.dropdownInput}
-              onPress={() => setAutoBudgetCategoryPopupVisible(true)}
-            >
-              <Text style={{ color: autoBudgetCategory ? "#000" : "#6B7280" }}>
-                {autoBudgetCategory || "Select Category"}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </Pressable>
-
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={[styles.secondaryButton, { flex: 1 }]}
-                onPress={resetAutoBudgetForm}
-              >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.primaryButton, { flex: 1 }]}
-                onPress={createAutoBudget}
-              >
-                <Text style={styles.primaryButtonText}>Create</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      )}
+      
 
       {/* Category Popup */}
       {categoryPopupVisible && (
@@ -857,4 +887,29 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 12,
   },
+  deleteBar: {
+  backgroundColor: "#FEF2F2",
+  borderRadius: 12,
+  padding: 14,
+  marginTop: 10,
+  marginBottom: 10,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  width: "100%",
+},
+
+deleteText: {
+  fontWeight: "500",
+  color: "#991B1B",
+},
+
+deleteSelectedButton: {
+  backgroundColor: "#DC2626",
+  paddingHorizontal: 18,
+  paddingVertical: 10,
+  borderRadius: 10,
+  alignItems: "center",
+  justifyContent: "center",
+},
 });
