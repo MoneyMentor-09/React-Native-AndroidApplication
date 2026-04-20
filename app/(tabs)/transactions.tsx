@@ -1,14 +1,14 @@
 import {
-View,
-Text,
-StyleSheet,
-Pressable,
-FlatList,
-TextInput,
-Alert,
-Modal,
-TouchableWithoutFeedback,
-Keyboard
+    View,
+    Text,
+    StyleSheet,
+    Pressable,
+    FlatList,
+    TextInput,
+    Alert,
+    Modal,
+    TouchableWithoutFeedback,
+    Keyboard
 } from "react-native";
 
 import { router, useFocusEffect } from "expo-router";
@@ -107,6 +107,15 @@ console.log("Fetch error", err);
 }
 };
 
+    type Transaction = {
+        id: string;
+        description: string;
+        category: string;
+        type: "income" | "expense";
+        amount: number;
+        date: string;
+        user_id: string;
+    };
 
 /* Refresh whenever screen opens */
 useFocusEffect(
@@ -120,29 +129,48 @@ useFocusEffect(
 );
 
 
-/* Filtering Logic */
-const filteredTransactions = transactions.filter(tx => {
-  const searchLower = search.toLowerCase();
+    /* Fetch Transactions */
+    const fetchTransactions = async () => {
+        try {
+            const supabase = getSupabaseBrowserClient();
+            const { data, error } = await supabase.auth.getSession();
+            if (error) throw error;
+            const user = data.session?.user;
+            if (!user) return;
 
-  const matchSearch =
-    searchLower === "" ||
-    tx.description.toLowerCase().includes(searchLower) ||
-    (tx.category?.toLowerCase().includes(searchLower) ?? false);
+            const { data: txData, error: txError } = await supabase
+                .from("transactions")
+                .select("*")
+                .eq("user_id", user.id)
+                .order("date", { ascending: false });
 
-  const matchType = filterType === "all" || tx.type === filterType;
+            if (txError) throw txError;
 
-  const matchCategory =
-    filterCategory === "all" || (tx.category ?? "").toLowerCase() === filterCategory.toLowerCase();
+            setTransactions(
+                (txData || []).map(tx => ({
+                    ...tx,
+                    type: tx.type?.toLowerCase(),
+                    amount: Number(tx.amount),
+                }))
+            );
 
-  return matchSearch && matchType && matchCategory;
-});
+        } catch (err) {
+            console.log("Fetch error", err);
+        }
+    };
 
 
-/* Transaction Row */
+    /* Refresh whenever screen opens */
+    useFocusEffect(
+        useCallback(() => {
+            fetchTransactions();
+        }, [])
+    );
 
-const handleEditTransaction = (transaction: Transaction) => {
 
-setEditingTransaction(transaction);
+    /* Filtering Logic */
+    const filteredTransactions = transactions.filter(tx => {
+        const searchLower = search.toLowerCase();
 
 setEditDescription(transaction.description);
 setEditAmount(Math.abs(transaction.amount).toString());
@@ -153,9 +181,10 @@ if (transaction.type === "income") {
 }
 setEditType(transaction.type);
 
-setEditModalVisible(true);
+        const matchType = filterType === "all" || tx.type === filterType;
 
-};
+        const matchCategory =
+            filterCategory === "all" || (tx.category ?? "").toLowerCase() === filterCategory.toLowerCase();
 
 const updateTransaction = async () => {
   if (!editingTransaction) return;
@@ -241,6 +270,7 @@ const toggleSelectTransaction = (id: string) => {
   });
 };
 
+                            const supabase = getSupabaseBrowserClient();
 
 const renderTransaction = ({ item }: { item: Transaction }) => {
   const selected = selectedTransactions.includes(item.id);
@@ -288,39 +318,22 @@ const renderTransaction = ({ item }: { item: Transaction }) => {
   );
 };
 
-return(
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
 
-<TouchableWithoutFeedback
-onPress={()=>{
-setSelectedTransactions([]);
-Keyboard.dismiss();
-}}
->
-<View style={styles.container}>
+                    <Text style={[
+                        styles.amount,
+                        item.type === "income" ? styles.income : styles.expense
+                    ]}>
+                        {item.type === "income" ? "+" : "-"}${Math.abs(item.amount).toFixed(2)}
+                    </Text>
 
+                    <Pressable onPress={() => handleEditTransaction(item)}>
+                        <Ionicons name="pencil-sharp" size={20} color="#2563EB" />
+                    </Pressable>
 
-{/* SEARCH */}
-<TouchableWithoutFeedback
-onPress={()=>{
-setSelectedTransactions([]);
-Keyboard.dismiss();
-}}
->
-<View style={{ marginTop: 16 }}>
-
-<TextInput
-placeholder="Search transactions..."
-style={styles.search}
-value={search}
-onChangeText={setSearch}
-/>
-</View>
-
-</TouchableWithoutFeedback>
-
-{/* FILTER TYPE */}
-
-<View style={styles.filterRow}>
+                    <Pressable onPress={() => handleDeleteTransaction(item.id)}>
+                        <Ionicons name="trash-sharp" size={20} color="#DC2626" />
+                    </Pressable>
 
 <Pressable
 style={[
@@ -600,13 +613,11 @@ No transactions found
 }
 />
 
-{isSelectionMode && (
+        );
 
-<View style={styles.deleteBar}>
+    };
 
-<Text style={styles.deleteText}>
-{selectedTransactions.length} Selected
-</Text>
+    return (
 
 <Pressable
 style={styles.deleteSelectedButton}
@@ -616,36 +627,237 @@ Delete Selected
 </Text>
 </Pressable>
 
-</View>
 
-)}
+                {/* SEARCH */}
+                <TouchableWithoutFeedback
+                    onPress={() => {
+                        setSelectedTransactions([]);
+                        Keyboard.dismiss();
+                    }}
+                >
+                    <View style={{ marginTop: 16 }}>
+
+                        <TextInput
+                            placeholder="Search transactions..."
+                            style={styles.search}
+                            value={search}
+                            onChangeText={setSearch}
+                        />
+                    </View>
+
+                </TouchableWithoutFeedback>
+
+                {/* FILTER TYPE */}
+
+                <View style={styles.filterRow}>
+
+                    <Pressable
+                        style={[
+                            styles.filterButton,
+                            filterType === "all" && styles.filterActive
+                        ]}
+                        onPress={() => setFilterType("all")}
+                    >
+                        <Text>All</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={[
+                            styles.filterButton,
+                            filterType === "income" && styles.filterActive
+                        ]}
+                        onPress={() => setFilterType("income")}
+                    >
+                        <Text>Income</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={[
+                            styles.filterButton,
+                            filterType === "expense" && styles.filterActive
+                        ]}
+                        onPress={() => setFilterType("expense")}
+                    >
+                        <Text>Expense</Text>
+                    </Pressable>
+
+                </View>
 
 
-{/* ACTION BUTTONS */}
+                <Modal visible={editModalVisible} animationType="slide">
 
-<Pressable
-style={styles.primaryButton}
-onPress={()=>router.push("/ReceiptCaptureScreen")}
->
-<Text style={styles.primaryButtonText}>
-Scan Receipt
-</Text>
-</Pressable>
+                    <View style={{ flex: 1, padding: 20, backgroundColor: "#fff" }}>
+
+                        <Text style={{ fontSize: 20, fontWeight: "700", marginBottom: 20 }}>
+                            Edit Transaction
+                        </Text>
+
+                        <View style={styles.segment}>
+
+                            <Pressable
+                                style={[
+                                    styles.segmentButton,
+                                    editType === "expense" && styles.segmentActive
+                                ]}
+                                onPress={() => setEditType("expense")}
+                            >
+                                <Text style={[
+                                    styles.segmentText,
+                                    editType === "expense" && styles.segmentTextActive
+                                ]}>
+                                    Expense
+                                </Text>
+                            </Pressable>
+
+                            <Pressable
+                                style={[
+                                    styles.segmentButton,
+                                    editType === "income" && styles.segmentActive
+                                ]}
+                                onPress={() => setEditType("income")}
+                            >
+                                <Text style={[
+                                    styles.segmentText,
+                                    editType === "income" && styles.segmentTextActive
+                                ]}>
+
+                                    Income
+                                </Text>
+                            </Pressable>
+
+                        </View>
+
+                        <Text style={{ marginTop: 10, marginBottom: 3, fontWeight: "600" }}>Description</Text>
+                        <TextInput
+                            value={editDescription}
+                            onChangeText={setEditDescription}
+                            placeholder="Description"
+                            style={styles.search}
+                        />
+
+                        <Text style={{ marginTop: 10, marginBottom: 3, fontWeight: "600" }}>Amount</Text>
+                        <TextInput
+                            value={editAmount}
+                            onChangeText={setEditAmount}
+                            placeholder="Amount"
+                            keyboardType="decimal-pad"
+                            style={styles.search}
+                        />
+
+                        <Text style={{ marginTop: 10, fontWeight: "600" }}>Category</Text>
+
+                        <View style={styles.categoryContainer}>
+
+                            {CATEGORIES.map((cat) => {
+
+                                const selected = editCategory === cat;
+
+                                return (
+
+                                    <Pressable
+                                        key={cat}
+                                        onPress={() => setEditCategory(cat)}
+                                        style={[
+                                            styles.categoryChip,
+                                            selected && styles.categoryChipSelected
+                                        ]}
+                                    >
+
+                                        <Text style={[
+                                            styles.categoryChipText,
+                                            selected && styles.categoryChipTextSelected
+                                        ]}>
+                                            {cat}
+                                        </Text>
+
+                                    </Pressable>
+
+                                );
+
+                            })}
+
+                        </View>
+
+                        <Pressable
+                            style={styles.primaryButton}
+                            onPress={updateTransaction}
+                        >
+                            <Text style={styles.primaryButtonText}>Save Changes</Text>
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.secondaryButton}
+                            onPress={() => setEditModalVisible(false)}
+                        >
+                            <Text style={styles.secondaryButtonText}>Cancel</Text>
+                        </Pressable>
+
+                    </View>
+
+                </Modal>
+
+                {/* TRANSACTION LIST */}
+
+                <FlatList
+                    data={filteredTransactions}
+                    renderItem={renderTransaction}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={{ paddingBottom: 120 }}
+                    style={{ width: "100%", marginTop: 10 }}
+                    ListEmptyComponent={
+                        <Text style={{ textAlign: "center", marginTop: 20, color: "#6B7280" }}>
+                            No transactions found
+                        </Text>
+                    }
+                />
+
+                {isSelectionMode && (
+
+                    <View style={styles.deleteBar}>
+
+                        <Text style={styles.deleteText}>
+                            {selectedTransactions.length} Selected
+                        </Text>
+
+                        <Pressable
+                            style={styles.deleteSelectedButton}
+                            onPress={deleteSelectedTransactions}
+                        >
+                            <Text style={{ color: "#fff", fontWeight: "700" }}>
+                                Delete Selected
+                            </Text>
+                        </Pressable>
+
+                    </View>
+
+                )}
 
 
-<Pressable
-style={styles.secondaryButton}
-onPress={()=>router.push("/ManualTransactionScreen")}
->
-<Text style={styles.secondaryButtonText}>
-Add Manually
-</Text>
-</Pressable>
+                {/* ACTION BUTTONS */}
 
-</View>
+                <Pressable
+                    style={styles.primaryButton}
+                    onPress={() => router.push("/ReceiptCaptureScreen")}
+                >
+                    <Text style={styles.primaryButtonText}>
+                        Scan Receipt
+                    </Text>
+                </Pressable>
 
-</TouchableWithoutFeedback>
-);
+
+                <Pressable
+                    style={styles.secondaryButton}
+                    onPress={() => router.push("/ManualTransactionScreen")}
+                >
+                    <Text style={styles.secondaryButtonText}>
+                        Add Manually
+                    </Text>
+                </Pressable>
+
+            </View>
+
+        </TouchableWithoutFeedback>
+    );
 
 }
 /* Styles */
