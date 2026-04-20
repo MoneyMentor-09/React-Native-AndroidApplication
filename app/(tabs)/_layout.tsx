@@ -51,7 +51,7 @@ const SIDEBAR_ROUTES: SidebarRoute[] = [
   { path: "/transactions", label: "Transactions", icon: "receipt-outline" },
   { path: "/budget", label: "Budget", icon: "wallet-outline" },
   { path: "/alerts", label: "Alerts", icon: "alert-circle-outline" },
-  { path: "/chat", label: "Chat", icon: "chatbox-outline" },
+  // { path: "/chat", label: "Chat", icon: "chatbox-outline" },
 ];
 
 const HEADER_TITLES: Record<string, string> = {
@@ -243,6 +243,7 @@ export default function TabsLayout() {
           <Tabs.Screen
             name="chat"
             options={{
+              href: null,
               title: "Chat",
               tabBarIcon: ({ color, size }) => (
                 <Ionicons name="chatbox-outline" size={size} color={color} />
