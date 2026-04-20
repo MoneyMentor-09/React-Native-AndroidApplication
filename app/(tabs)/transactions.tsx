@@ -12,28 +12,31 @@ Keyboard
 } from "react-native";
 
 import { router, useFocusEffect } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 
 /* Categories same as web */
-const CATEGORIES = [
-"Food & Dining",
-"Transportation",
-"Shopping",
-"Entertainment",
-"Bills & Utilities",
-"Healthcare",
-"Education",
-"Travel",
-"Groceries",
-"Gas",
-"Rent",
-"Insurance",
-"Salary",
-"Freelance",
-"Investment",
-"Other"
+const INCOME_CATEGORIES = [
+  "Salary",
+  "Freelance",
+  "Investment",
+  "Other Income"
+];
+
+const EXPENSE_CATEGORIES = [
+  "Food & Dining",
+  "Transportation",
+  "Shopping",
+  "Entertainment",
+  "Bills & Utilities",
+  "Healthcare",
+  "Education",
+  "Travel",
+  "Groceries",
+  "Gas",
+  "Rent",
+  "Insurance",
+  "Other Expense"
 ];
 
 export default function TransactionsScreen(){
@@ -60,6 +63,18 @@ const [editAmount,setEditAmount] = useState("");
 const [editCategory,setEditCategory] = useState("");
 const isSelectionMode = selectedTransactions.length > 0;
 const [editType,setEditType] = useState<"income"|"expense">("expense");
+const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+const [deleteMode, setDeleteMode] = useState<"single" | "bulk">("single");
+const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+useEffect(() => {
+  if (editType === "income") {
+    setEditCategory("Income");
+  } else {
+    setEditCategory("");
+  }
+}, [editType]);
+
 
 
 /* Fetch Transactions */
@@ -95,9 +110,13 @@ console.log("Fetch error", err);
 
 /* Refresh whenever screen opens */
 useFocusEffect(
-useCallback(()=>{
-fetchTransactions();
-},[])
+  useCallback(() => {
+    fetchTransactions();
+
+    return () => {
+      setSelectedTransactions([]);
+    };
+  }, [])
 );
 
 
@@ -127,7 +146,11 @@ setEditingTransaction(transaction);
 
 setEditDescription(transaction.description);
 setEditAmount(Math.abs(transaction.amount).toString());
-setEditCategory(transaction.category);
+if (transaction.type === "income") {
+  setEditCategory(transaction.category || "Salary");
+} else {
+  setEditCategory(transaction.category || "Food & Dining");
+}
 setEditType(transaction.type);
 
 setEditModalVisible(true);
@@ -135,184 +158,134 @@ setEditModalVisible(true);
 };
 
 const updateTransaction = async () => {
+  if (!editingTransaction) return;
 
-if(!editingTransaction) return;
+  try {
+    const supabase = getSupabaseBrowserClient();
 
-try{
+    let value = Number.parseFloat(editAmount);
 
-const supabase = getSupabaseBrowserClient();
+    if (editType === "expense") {
+      value = -Math.abs(value);
+    } else {
+      value = Math.abs(value);
+    }
 
-let value = Number.parseFloat(editAmount);
+    await supabase
+      .from("transactions")
+      .update({
+        description: editDescription,
+        amount: value,
+        type: editType,
+        category:
+          editType === "income"
+            ? editCategory || "Salary"
+            : editCategory || "Other Expense"
+      })
+      .eq("id", editingTransaction.id);
 
-if(editType === "expense"){
-value = -Math.abs(value);
-}else{
-value = Math.abs(value);
-}
+    setEditModalVisible(false);
+    fetchTransactions();
 
-await supabase
-.from("transactions")
-.update({
-description: editDescription,
-amount: value,
-category: editCategory,
-type: editType
-})
-.eq("id",editingTransaction.id);
-
-setEditModalVisible(false);
-
-fetchTransactions();
-
-}catch(err){
-console.log(err);
-}
-
+  } catch (err) {
+    console.log(err);
+  }
 };
 
-// Add missing delete handler
-const handleDeleteTransaction = (transactionId: string) => {
-
-Alert.alert(
-"Delete Transaction",
-"Are you sure you want to delete this transaction?",
-[
-{ text:"Cancel", style:"cancel" },
-{
-text:"Delete",
-style:"destructive",
-onPress: async () => {
-
-try{
-
-const supabase = getSupabaseBrowserClient();
-
-const { error } = await supabase
-.from("transactions")
-.delete()
-.eq("id", transactionId);
-
-if(error) throw error;
-
-fetchTransactions();
-
-}catch(err){
-console.log("Delete error",err);
-}
-
-}
-}
-]
-);
-
+const confirmSingleDelete = (id: string) => {
+  setPendingDeleteId(id);
+  setDeleteMode("single");
+  setDeleteModalVisible(true);
 };
 
-const toggleSelectTransaction = (id:string)=>{
-setSelectedTransactions(prev=>{
-if(prev.includes(id)){
-return prev.filter(tx => tx !== id);
-}
-return [...prev,id];
-});
+const confirmBulkDelete = () => {
+  setDeleteMode("bulk");
+  setDeleteModalVisible(true);
 };
 
-const deleteSelectedTransactions = () => {
+const executeDelete = async () => {
+  try {
+    const supabase = getSupabaseBrowserClient();
 
-Alert.alert(
-"Delete Selected",
-"Delete all selected transactions?",
-[
-{ text:"Cancel",style:"cancel"},
-{
-text:"Delete",
-style:"destructive",
-onPress: async () => {
+    if (deleteMode === "single" && pendingDeleteId) {
+      await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", pendingDeleteId);
+    }
 
-try{
+    if (deleteMode === "bulk") {
+      await supabase
+        .from("transactions")
+        .delete()
+        .in("id", selectedTransactions);
 
-const supabase = getSupabaseBrowserClient();
+      setSelectedTransactions([]);
+    }
 
-await supabase
-.from("transactions")
-.delete()
-.in("id",selectedTransactions);
+    fetchTransactions();
+    setDeleteModalVisible(false);
+    setPendingDeleteId(null);
 
-setSelectedTransactions([]);
-
-fetchTransactions();
-
-}catch(err){
-console.log(err);
-}
-
-}
-}
-]
-);
-
+  } catch (err) {
+    console.log("Delete error", err);
+  }
 };
 
+const toggleSelectTransaction = (id: string) => {
+  setSelectedTransactions(prev => {
+    if (prev.includes(id)) {
+      return prev.filter(tx => tx !== id);
+    }
+    return [...prev, id];
+  });
+};
 
 
 const renderTransaction = ({ item }: { item: Transaction }) => {
+  const selected = selectedTransactions.includes(item.id);
 
-const selected = selectedTransactions.includes(item.id);
+  return (
+    <Pressable
+  style={({ pressed }) => [
+    styles.transactionRow,
+    selected && styles.transactionRowSelected,
+    pressed && styles.transactionRowPressed,
+    ]}
+      onPress={() => {
+        if (isSelectionMode) {
+          toggleSelectTransaction(item.id);
+        } else {
+          handleEditTransaction(item);
+        }
+      }}
+          onLongPress={() => {
+      if (!isSelectionMode) {
+        toggleSelectTransaction(item.id);
+      } else {
+        toggleSelectTransaction(item.id);
+      }
+    }}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={styles.txDescription}>
+          {item.description}
+        </Text>
 
-return(
+        <Text style={styles.txMeta}>
+          {new Date(item.date).toLocaleDateString()} • {item.category}
+        </Text>
+      </View>
 
-<View style={styles.transactionRow}>
-
-{/* CHECKBOX */}
-
-<Pressable
-onPress={()=>toggleSelectTransaction(item.id)}
-style={[
-styles.checkbox,
-selected && styles.checkboxSelected
-]}
->
-
-{selected && (
-<Ionicons name="checkmark" size={14} color="#fff" />
-)}
-
-</Pressable>
-
-<View style={{flex:1}}>
-
-<Text style={styles.txDescription}>
-{item.description}
-</Text>
-
-<Text style={styles.txMeta}>
-{new Date(item.date).toLocaleDateString()} • {item.category}
-</Text>
-
-</View>
-
-<View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-
-<Text style={[
-styles.amount,
-item.type === "income" ? styles.income : styles.expense
-]}>
-{item.type === "income" ? "+" : "-"}${Math.abs(item.amount).toFixed(2)}
-</Text>
-
-<Pressable onPress={() => handleEditTransaction(item)}>
-<Ionicons name="pencil-sharp" size={20} color="#2563EB" />
-</Pressable>
-
-<Pressable onPress={() => handleDeleteTransaction(item.id)}>
-<Ionicons name="trash-sharp" size={20} color="#DC2626" />
-</Pressable>
-
-</View>
-
-</View>
-
-);
-
+      <Text style={[
+        styles.amount,
+        item.type === "income" ? styles.income : styles.expense
+      ]}>
+        {item.type === "income" ? "+" : "-"}
+        ${Math.abs(item.amount).toFixed(2)}
+      </Text>
+    </Pressable>
+  );
 };
 
 return(
@@ -383,115 +356,233 @@ onPress={()=>setFilterType("expense")}
 
 
 <Modal visible={editModalVisible} animationType="slide">
+  <View style={{ flex: 1, padding: 20, backgroundColor: "#fff" }}>
 
-<View style={{flex:1,padding:20,backgroundColor:"#fff"}}>
+    {/* HEADER */}
+    <Text style={{ fontSize: 20, fontWeight: "700", marginBottom: 20 }}>
+      Edit Transaction
+    </Text>
 
-<Text style={{fontSize:20,fontWeight:"700",marginBottom:20}}>
-Edit Transaction
-</Text>
+    {/* TYPE SWITCH */}
+    <View style={styles.segment}>
+      <Pressable
+        style={[
+          styles.segmentButton,
+          editType === "expense" && styles.segmentActive
+        ]}
+        onPress={() => setEditType("expense")}
+      >
+        <Text
+          style={[
+            styles.segmentText,
+            editType === "expense" && styles.segmentTextActive
+          ]}
+        >
+          Expense
+        </Text>
+      </Pressable>
 
-<View style={styles.segment}>
+      <Pressable
+        style={[
+          styles.segmentButton,
+          editType === "income" && styles.segmentActive
+        ]}
+        onPress={() => setEditType("income")}
+      >
+        <Text
+          style={[
+            styles.segmentText,
+            editType === "income" && styles.segmentTextActive
+          ]}
+        >
+          Income
+        </Text>
+      </Pressable>
+    </View>
 
-<Pressable
-style={[
-styles.segmentButton,
-editType==="expense" && styles.segmentActive
-]}
-onPress={()=>setEditType("expense")}
+    {/* DESCRIPTION */}
+    <Text style={{ marginTop: 10, marginBottom: 3, fontWeight: "600" }}>
+      Description
+    </Text>
+    <TextInput
+      value={editDescription}
+      onChangeText={setEditDescription}
+      placeholder="Description"
+      style={styles.search}
+    />
+
+    {/* AMOUNT */}
+    <Text style={{ marginTop: 10, marginBottom: 3, fontWeight: "600" }}>
+      Amount
+    </Text>
+    <TextInput
+      value={editAmount}
+      onChangeText={setEditAmount}
+      placeholder="Amount"
+      keyboardType="decimal-pad"
+      style={styles.search}
+    />
+
+    {/* CATEGORY (ONLY FOR EXPENSE) */}
+{editType === "expense" ? (
+  <>
+    <Text style={{ marginTop: 10, fontWeight: "600" }}>
+      Category
+    </Text>
+
+    <View style={styles.categoryContainer}>
+      {EXPENSE_CATEGORIES.map((cat) => {
+        const selected = editCategory === cat;
+
+        return (
+          <Pressable
+            key={cat}
+            onPress={() => setEditCategory(cat)}
+            style={[
+              styles.categoryChip,
+              selected && styles.categoryChipSelected
+            ]}
+          >
+            <Text
+              style={[
+                styles.categoryChipText,
+                selected && styles.categoryChipTextSelected
+              ]}
+            >
+              {cat}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  </>
+) : (
+  <>
+    <Text style={{ marginTop: 10, fontWeight: "600" }}>
+      Income Category
+    </Text>
+
+    <View style={styles.categoryContainer}>
+      {INCOME_CATEGORIES.map((cat) => {
+        const selected = editCategory === cat;
+
+        return (
+          <Pressable
+            key={cat}
+            onPress={() => setEditCategory(cat)}
+            style={[
+              styles.categoryChip,
+              selected && styles.categoryChipSelected
+            ]}
+          >
+            <Text
+              style={[
+                styles.categoryChipText,
+                selected && styles.categoryChipTextSelected
+              ]}
+            >
+              {cat}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  </>
+)}
+
+    {/* SAVE */}
+    <Pressable
+      style={styles.primaryButton}
+      onPress={updateTransaction}
+    >
+      <Text style={styles.primaryButtonText}>
+        Save Changes
+      </Text>
+    </Pressable>
+
+    {/* CANCEL */}
+    <Pressable
+      style={styles.secondaryButton}
+      onPress={() => setEditModalVisible(false)}
+    >
+      <Text style={styles.secondaryButtonText}>
+        Cancel
+      </Text>
+    </Pressable>
+
+    {/* DELETE */}
+    <Pressable
+      style={[
+        styles.secondaryButton,
+        { borderColor: "#DC2626" }
+      ]}
+      onPress={() => {
+        if (editingTransaction) {
+          setEditModalVisible(false);
+          confirmSingleDelete(editingTransaction.id);
+        }
+      }}
+    >
+      <Text
+        style={[
+          styles.secondaryButtonText,
+          { color: "#DC2626" }
+        ]}
+      >
+        Delete Transaction
+      </Text>
+    </Pressable>
+
+  </View>
+</Modal>
+<Modal
+  visible={deleteModalVisible}
+  transparent
+  animationType="fade"
 >
-<Text style={[
-styles.segmentText,
-editType==="expense" && styles.segmentTextActive
-]}>
-Expense
-</Text>
-</Pressable>
+  <TouchableWithoutFeedback onPress={() => setDeleteModalVisible(false)}>
+    <View style={styles.menuOverlay}>
+      <View style={styles.menuBox}>
 
-<Pressable
-style={[
-styles.segmentButton,
-editType==="income" && styles.segmentActive
-]}
-onPress={()=>setEditType("income")}
->
-<Text style={[
-styles.segmentText,
-editType==="income" && styles.segmentTextActive
-]}>
+        <Text style={{
+          fontSize: 16,
+          fontWeight: "700",
+          marginBottom: 12,
+          textAlign: "center"
+        }}>
+          Confirm Delete
+        </Text>
 
-Income
-</Text>
-</Pressable>
+        <Text style={{
+          fontSize: 14,
+          color: "#6B7280",
+          marginBottom: 16,
+          textAlign: "center"
+        }}>
+          {deleteMode === "single"
+            ? "Delete this transaction?"
+            : `Delete ${selectedTransactions.length} transactions?`}
+        </Text>
 
-</View>
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => setDeleteModalVisible(false)}
+        >
+          <Text style={styles.menuText}>Cancel</Text>
+        </Pressable>
 
-<Text style={{marginTop:10,marginBottom:3,fontWeight:"600"}}>Description</Text>
-<TextInput
-value={editDescription}
-onChangeText={setEditDescription}
-placeholder="Description"
-style={styles.search}
-/>
+        <Pressable
+          style={styles.menuItem}
+          onPress={executeDelete}
+        >
+          <Text style={[styles.menuText, { color: "#DC2626", fontWeight: "700" }]}>
+            Delete
+          </Text>
+        </Pressable>
 
-<Text style={{marginTop:10,marginBottom:3,fontWeight:"600"}}>Amount</Text>
-<TextInput
-value={editAmount}
-onChangeText={setEditAmount}
-placeholder="Amount"
-keyboardType="decimal-pad"
-style={styles.search}
-/>
-
-<Text style={{marginTop:10,fontWeight:"600"}}>Category</Text>
-
-<View style={styles.categoryContainer}>
-
-{CATEGORIES.map((cat)=>{
-
-const selected = editCategory === cat;
-
-return(
-
-<Pressable
-key={cat}
-onPress={()=>setEditCategory(cat)}
-style={[
-styles.categoryChip,
-selected && styles.categoryChipSelected
-]}
->
-
-<Text style={[
-styles.categoryChipText,
-selected && styles.categoryChipTextSelected
-]}>
-{cat}
-</Text>
-
-</Pressable>
-
-);
-
-})}
-
-</View>
-
-<Pressable
-style={styles.primaryButton}
-onPress={updateTransaction}
->
-<Text style={styles.primaryButtonText}>Save Changes</Text>
-</Pressable>
-
-<Pressable
-style={styles.secondaryButton}
-onPress={()=>setEditModalVisible(false)}
->
-<Text style={styles.secondaryButtonText}>Cancel</Text>
-</Pressable>
-
-</View>
-
+      </View>
+    </View>
+  </TouchableWithoutFeedback>
 </Modal>
 
 {/* TRANSACTION LIST */}
@@ -519,8 +610,7 @@ No transactions found
 
 <Pressable
 style={styles.deleteSelectedButton}
-onPress={deleteSelectedTransactions}
->
+onPress={confirmBulkDelete}>
 <Text style={{color:"#fff",fontWeight:"700"}}>
 Delete Selected
 </Text>
@@ -558,9 +648,6 @@ Add Manually
 );
 
 }
-
-
-
 /* Styles */
 
 const styles = StyleSheet.create({
@@ -629,13 +716,39 @@ filterActive:{
 backgroundColor:"#84aafc"
 },
 
-transactionRow:{
-flexDirection:"row",
-justifyContent:"space-between",
-alignItems:"center",
-paddingVertical:14,
-borderBottomWidth:1,
-borderColor:"#F3F4F6"
+transactionRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  paddingVertical: 14,
+  paddingHorizontal: 14,
+  borderRadius: 16,
+  backgroundColor: "#FFFFFF",
+  borderColor: "#E5E7EB",
+  shadowColor: "#000",
+  shadowOpacity: 0.02,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 2 },
+  //elevation: 1,
+},
+
+transactionRowSelected: {
+  backgroundColor: "#F8FAFF",
+  borderColor: "#BFDBFE",
+  borderLeftWidth: 4,
+  borderRightWidth: 4,
+  borderLeftColor: "#2563EB",
+  borderRightColor: "#2563EB",
+  elevation: 3,
+  shadowColor: "#2563EB",
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  transform: [{ scale: 1.01 }],
+},
+
+transactionRowPressed: {
+  opacity: 0.92,
+  transform: [{ scale: 0.995 }],
 },
 
 txDescription:{
@@ -693,29 +806,6 @@ fontSize:16,
 fontWeight:"700",
 textAlign:"center"
 
-},
-
-checkbox:{
-width:22,
-height:22,
-borderRadius:6,
-borderWidth:2,
-borderColor:"#CBD5F5",
-alignItems:"center",
-justifyContent:"center",
-marginRight:10
-},
-
-checkboxSelected:{
-backgroundColor:"#2563EB",
-borderColor:"#2563EB"
-},
-
-multiDeleteContainer:{
-position:"absolute",
-bottom:20,
-left:20,
-right:20
 },
 
 deleteSelectedButton:{
@@ -795,6 +885,40 @@ segment: {
   flexDirection: "row",
   gap: 8,
   marginVertical: 16
+},
+menuOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.3)",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+menuBox: {
+  width: 260,
+  backgroundColor: "#FFFFFF",
+  borderRadius: 14,
+  paddingVertical: 10,
+  elevation: 5,
+  shadowColor: "#000",
+  shadowOpacity: 0.15,
+  shadowRadius: 10,
+},
+
+menuItem: {
+  paddingVertical: 12,
+  paddingHorizontal: 16,
+  alignItems: "center",  
+},
+
+menuText: {
+  fontSize: 16,
+  fontWeight: "600",
+  color: "#111827",
+  borderWidth:2,
+  borderColor:"#2563EB",
+  borderRadius:14,
+  paddingHorizontal:48,
+  paddingVertical:10
 }
 
 });
