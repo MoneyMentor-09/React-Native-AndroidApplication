@@ -1,175 +1,734 @@
-/**
- * Ionicons
- * --------
- * Icon library provided by Expo. This allows us to easily display
- * vector icons within React Native applications. Here it is used
- * to visually represent alerts/notifications.
- */
-import { Ionicons } from "@expo/vector-icons";
+import {
+    View,
+    Text,
+    StyleSheet,
+    Pressable,
+    FlatList,
+    TextInput,
+    Alert,
+    Modal,
+    TouchableWithoutFeedback,
+    Keyboard
+} from "react-native";
 
-/**
- * React Native UI components
- * --------------------------
- * View      → Container for layout and grouping components.
- * Text      → Displays text content.
- * StyleSheet→ Optimized way to define component styles.
- * Pressable → Component that detects touch interactions
- *             (used here for the navigation button).
- */
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { AntDesign, Feather, FontAwesome5 } from "@expo/vector-icons";
+import { useState, useCallback } from "react";
+import { getSupabaseBrowserClient } from "../../lib/supabase/client";
+import {
+    analyzeSuspiciousTransactions,
+    Transaction as Tx,
+} from "@/lib/transactions/suspicious"
 
-/**
- * Router
- * ------
- * Provided by expo-router to handle navigation between screens.
- * router.push() allows programmatic navigation to another route.
- */
-import { router } from "expo-router";
 
-/**
- * alertsScreen Component
- * ----------------------
- * This screen represents the Alerts page of the application.
- * It informs users about alerts such as:
- * - Budget warnings
- * - Unusual spending notifications
- * - Reminder notifications
- */
-export default function alertsScreen() {
-  return (
+/* Categories same as web */
+const CATEGORIES = [
+    "Food & Dining",
+    "Transportation",
+    "Shopping",
+    "Entertainment",
+    "Bills & Utilities",
+    "Healthcare",
+    "Education",
+    "Travel",
+    "Groceries",
+    "Gas",
+    "Rent",
+    "Insurance",
+    "Salary",
+    "Freelance",
+    "Investment",
+    "Other"
+];
 
-    /**
-     * Main container for the entire screen.
-     * It centers all elements both vertically and horizontally.
-     */
-    <View style={styles.container}>
+export default function AlertsScreen() {
 
-      {/*
-        Icon wrapper container.
-        Provides a soft background and rounded shape
-        to visually highlight the alert icon.
-      */}
-      <View style={styles.iconWrap}>
-        <Ionicons
-          name="alert-circle-outline"  // Ionicon representing alerts
-          size={40}                    // Icon size in pixels
-          color="#2563EB"              // Primary blue color
-        />
-      </View>
+    type Transaction = {
+        id: string;
+        description: string;
+        category: string;
+        type: "income" | "expense";
+        amount: number;
+        date: string;
+        user_id: string;
+    };
 
-      {/*
-        Screen title.
-        Clearly indicates that the page is the Alerts section.
-      */}
-      <Text style={styles.title}>Alerts</Text>
+    type AlertMM = {
+        id: string
+        user_id: string
+        message: string
+        risk_score: number
+        timestamp: string
+        read: boolean
+        type: "fraud" | "unusual_spending" | "budget_warning" | "low_balance"
+        transaction_id?: string | null
+        suspicious_pattern_id?: string | null
+    };
 
-      {/*
-        Subtitle / description text.
-        Explains what types of alerts the user will see here.
-      */}
-      <Text style={styles.subtitle}>
-        Stay on top of budget alerts, unusual spending, and reminders.
-      </Text>
+    type DismissedRow = { pattern_id: string };
 
-      {/*
-        Navigation Button
-        -----------------
-        When pressed, the user is taken back to the Dashboard screen.
-        router.push() adds the dashboard screen to the navigation stack.
-      */}
-      <Pressable
-        style={styles.button}
-        onPress={() => router.push("/dashboard")}
-      >
-        <Text style={styles.buttonText}>Back to Dashboard</Text>
-      </Pressable>
+    const [transactions, setTransactions] = useState([] as Transaction[]);
+    const [search, setSearch] = useState("");
+    const [filterType, setFilterType] = useState("all");
+    const [filterCategory] = useState("all");
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [editDescription, setEditDescription] = useState("");
+    const [editAmount, setEditAmount] = useState("");
+    const [editCategory, setEditCategory] = useState("");
+    const [editType, setEditType] = useState<"income" | "expense">("expense");
 
-    </View>
-  );
+    const [alerts, setAlerts] = useState([] as AlertMM[]);
+
+    const unreadCount = alerts.filter((a) => !a.read).length
+    const alertCount = alerts.length
+    const highRiskCount = alerts.filter((a) => a.risk_score > 70).length
+    const budgetCount = alerts.filter((a) => a.type === "budget_warning").length
+
+    const fetchAlerts = async () => {
+        try {
+            const supabase = getSupabaseBrowserClient();
+            const {
+                data: { user },
+            } = await supabase.auth.getUser()
+
+            if (!user) return;
+
+            // 1) Load dismissed suspicious patterns for this user
+            const { data: dismissedData, error: dismissedError } = await supabase
+                .from("dismissed_suspicious_alerts")
+                .select("pattern_id")
+                .eq("user_id", user.id)
+
+            if (dismissedError) throw dismissedError;
+
+            const dismissedSet = new Set(
+                (dismissedData || []).map((d: DismissedRow) => d.pattern_id),
+            );
+
+            // 2) Load recent transactions (e.g., last 90 days)
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+            const cutoff = ninetyDaysAgo.toISOString().split("T")[0]; // YYYY-MM-DD
+
+            const { data: txData, error: txError } = await supabase
+                .from("transactions")
+                .select("*")
+                .eq("user_id", user.id)
+                .gte("date", cutoff)
+                .order("date", { ascending: false })
+
+            if (txError) throw txError;
+
+            const txs = (txData || []) as Tx[];
+
+            // 3) Run suspicious analysis
+            const suspicious = analyzeSuspiciousTransactions(txs, {
+                highAmountThreshold: 1000,
+                smallAmountThreshold: 10,
+                manySmallCountThreshold: 5,
+            });
+
+            // 4) Filter out patterns the user has dismissed
+            const toInsert = suspicious.filter((s) => !dismissedSet.has(s.id));
+
+            // 5) Upsert suspicious alerts into alerts table
+            if (toInsert.length > 0) {
+                const rows = toInsert.map((s) => {
+                    const firstTx = s.transactions[0];
+                    return {
+                        user_id: user.id,
+                        message: s.message,
+                        risk_score: s.riskScore,
+                        type: s.rule === "high-amount" ? "fraud" : "unusual_spending",
+                        timestamp: firstTx?.date
+                            ? new Date(firstTx.date).toISOString()
+                            : new Date().toISOString(),
+                        suspicious_pattern_id: s.id,
+                        transaction_id: firstTx?.id ?? null,
+                    }
+                });
+
+                const { error: upsertError } = await supabase
+                    .from("alerts")
+                    .upsert(rows, {
+                        onConflict: "user_id,suspicious_pattern_id",
+                    });
+
+                if (upsertError) throw upsertError;
+            }
+
+            // 6) Finally, load all alerts from DB
+            const { data: alertData, error: alertError } = await supabase
+                .from("alerts")
+                .select("*")
+                .eq("user_id", user.id)
+                .order("timestamp", { ascending: false })
+
+            if (alertError) throw alertError;
+
+            setAlerts(
+                (alertData || []).map(al => ({
+                    ...al,
+                    type: al.type?.toLowerCase(),
+                }))
+            );
+        } catch (error) {
+            console.error(error)
+        }
+    }
+
+    /* Refresh whenever screen opens */
+    useFocusEffect(
+        useCallback(() => {
+            fetchAlerts();
+        }, [])
+    );
+
+    const filteredAlerts = alerts
+        .filter((alert) => {
+            switch (filterType) {
+                case "unread":
+                    return !alert.read
+                case "fraud":
+                    return alert.type === "fraud" || alert.risk_score > 70
+                case "budget":
+                    return alert.type === "budget_warning"
+                default:
+                    return alert
+            }
+        })
+        .sort((a, b) => {
+            // unread first
+            if (a.read === b.read) {
+                return (
+                    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                )
+            }
+            return a.read ? 1 : -1
+        })
+
+    // Add read handler
+    const handleReadAlert = async(alertId: string) => {
+
+        try {
+
+            const supabase = getSupabaseBrowserClient();
+
+            const { error } = await supabase
+                .from("alerts")
+                .update({ read: true })
+                .eq("id", alertId);
+
+            if (error) throw error;
+
+            fetchAlerts();
+
+        } catch (err) {
+            console.log("Read alert error", err);
+        }
+    };
+
+    // Read all handler
+    const handleReadAllAlerts = async () => {
+
+        try {
+
+            const supabase = getSupabaseBrowserClient();
+
+            const {
+                data: { user },
+            } = await supabase.auth.getUser()
+
+            if (!user) return;
+
+            const { error } = await supabase
+                .from("alerts")
+                .update({ read: true })
+                .eq("user_id", user.id);
+
+            if (error) throw error;
+
+            fetchAlerts();
+
+        } catch (err) {
+            console.log("Read all alerts error", err);
+        }
+    };
+
+    // Add delete handler
+    const handleDeleteAlert = (alertId: string) => {
+
+        Alert.alert(
+            "Delete Alert",
+            "Are you sure you want to delete this alert? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+
+                        try {
+                            const supabase = getSupabaseBrowserClient()
+
+                            const alertToDelete = alerts.find((a) => a.id === alertId)
+
+                            // If this alert came from a suspicious pattern, remember that dismissal
+                            if (alertToDelete?.suspicious_pattern_id) {
+                                const {
+                                    data: { user },
+                                } = await supabase.auth.getUser()
+                                if (user) {
+                                    await supabase.from("dismissed_suspicious_alerts").upsert({
+                                        user_id: user.id,
+                                        pattern_id: alertToDelete.suspicious_pattern_id,
+                                    })
+                                }
+                            }
+
+                            const { error } = await supabase.from("alerts").delete().eq("id", alertId);
+
+                            if (error) throw error;
+
+                            fetchAlerts();
+
+                            setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
+                        } catch (error) {
+                            console.error(error);
+                        }
+                    }
+                }
+            ]
+        );
+
+    };
+
+    // Add go to transactions handler
+    const handleGoToTransactions = (alertId: string) => {
+        router.push("/(tabs)/transactions")
+    }
+
+    const renderAlert = ({ item }: { item: AlertMM }) => {
+
+        return (
+
+            <View style={[styles.alertRow, item.type === "fraud" || item.risk_score > 70 ? styles.alertRowHighRisk 
+                : item.risk_score > 30 ? styles.alertRowMediumRisk : styles.alertRowLowRisk, !item.read ? styles.alertRowUnread : null]}>
+
+                <View style={{ flex: 1 }}>
+
+                    <Text style={styles.txDescription}>
+                        {item.message}
+                    </Text>
+
+                    <Text style={styles.txMeta}>
+                        {new Date(item.timestamp).toLocaleDateString()} • Risk Score: {item.risk_score}%
+                    </Text>
+
+                </View>
+
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+
+                    <Text style={[
+                        styles.amount,
+                        styles.highRisk
+                    ]}>
+                        {item.risk_score > 70 ? "High Risk" : ""}
+                    </Text>
+
+                    {/* Render checkmark only when the alert is unread */}
+                    {!item.read && (
+                        <Pressable onPress={() => handleReadAlert(item.id)}>
+                            <AntDesign name="check-circle" size={27} color="#000000" />
+                        </Pressable>
+                    )}
+
+                    <Pressable onPress={() => handleGoToTransactions(item.id)}>
+                        <FontAwesome5 name="location-arrow" size={27} color="#000000" />
+                    </Pressable>
+
+                    <Pressable onPress={() => handleDeleteAlert(item.id)}>
+                        <Feather name="x-circle" size={30} color="#000000" />
+                    </Pressable>
+
+                </View>
+
+            </View>
+
+        );
+
+    };
+
+    return (
+
+        <TouchableWithoutFeedback
+            onPress={() => {
+                Keyboard.dismiss();
+            }}
+        >
+            <View style={styles.container}>
+
+
+                {/* ALERT STATISTICS */}
+                <Text style={{ fontSize: 18, fontWeight: "600", marginTop: 20 }}></Text>
+                <View style={styles.filterRow}>
+                    <View style={styles.infoChip}>
+                        <Text style={styles.largeNumber}>{unreadCount}</Text>
+                        <Text>Unread Alerts</Text>
+                    </View>
+                    <View style={styles.infoChip}>
+                        <Text style={styles.largeNumber}>{highRiskCount}</Text>
+                        <Text>High Risk Alerts</Text>
+                    </View>
+                    <View style={styles.infoChip}>
+                        <Text style={styles.largeNumber}>{alertCount}</Text>
+                        <Text>Total Alerts</Text>
+                    </View>
+                </View>
+
+                {/* FILTER TYPE */}
+
+                <View style={styles.filterRow}>
+
+                    <Pressable
+                        style={[
+                            styles.filterButton,
+                            filterType === "all" && styles.filterActive
+                        ]}
+                        onPress={() => setFilterType("all")}
+                    >
+                        <Text>All ({alertCount})</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={[
+                            styles.filterButton,
+                            filterType === "unread" && styles.filterActive
+                        ]}
+                        onPress={() => setFilterType("unread")}
+                    >
+                        <Text>Unread ({unreadCount})</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={[
+                            styles.filterButton,
+                            filterType === "fraud" && styles.filterActive
+                        ]}
+                        onPress={() => setFilterType("fraud")}
+                    >
+                        <Text>Fraud ({highRiskCount})</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={[
+                            styles.filterButton,
+                            filterType === "budget" && styles.filterActive
+                        ]}
+                        onPress={() => setFilterType("budget")}
+                    >
+                        <Text>Budget ({budgetCount})</Text>
+                    </Pressable>
+
+                </View>
+
+                {/* ALERT LIST */}
+
+                <FlatList
+                    data={filteredAlerts}
+                    renderItem={renderAlert}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={{ paddingBottom: 120 }}
+                    style={{ width: "100%", marginTop: 10 }}
+                    ItemSeparatorComponent={() => <View style={{ height: 5 }} />}
+                    ListEmptyComponent={
+                        <Text style={{ textAlign: "center", marginTop: 20, color: "#6B7280" }}>
+                            No alerts found
+                        </Text>
+                    }
+                />
+
+                {/* ACTION BUTTONS */}
+
+                {/* Render only if there are unread alerts */}
+                {unreadCount > 0 && (
+                    <Pressable
+                        style={styles.secondaryButton}
+                        onPress={() => handleReadAllAlerts()}
+                    >
+                        <Text style={styles.secondaryButtonText}>
+                            Mark All as Read
+                        </Text>
+                    </Pressable>
+                )}
+
+            </View>
+
+        </TouchableWithoutFeedback>
+    );
+
 }
 
-/**
- * Stylesheet
- * ----------
- * Central location where all component styles are defined.
- * This improves readability and performance.
- */
+/* Styles */
+
 const styles = StyleSheet.create({
 
-  /**
-   * container
-   * ---------
-   * Main layout wrapper for the screen.
-   */
-  container: {
-    flex: 1,                     // Take full screen height
-    justifyContent: "center",    // Center items vertically
-    alignItems: "center",        // Center items horizontally
-    backgroundColor: "#FFFFFF",  // White background
-    paddingHorizontal: 24,       // Horizontal padding for spacing
-  },
+    container: {
+        flex: 1,
+        backgroundColor: "#FFFFFF",
+        alignItems: "center",
+        paddingHorizontal: 15
+    },
 
-  /**
-   * iconWrap
-   * --------
-   * Decorative container for the alert icon.
-   */
-  iconWrap: {
-    width: 88,                   // Width of the icon container
-    height: 88,                  // Height of the icon container
-    borderRadius: 24,            // Rounded corners
-    backgroundColor: "#EFF6FF",  // Light blue background
-    alignItems: "center",        // Center icon horizontally
-    justifyContent: "center",    // Center icon vertically
-    marginBottom: 20,            // Space below icon
-  },
+    iconWrap: {
+        width: 88,
+        height: 88,
+        borderRadius: 24,
+        backgroundColor: "#EFF6FF",
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 30,
+        marginBottom: 20
+    },
 
-  /**
-   * title
-   * -----
-   * Main heading text for the screen.
-   */
-  title: {
-    fontSize: 28,                // Large text size
-    fontWeight: "800",           // Extra bold font
-    color: "#111827",            // Dark gray text color
-  },
+    title: {
+        fontSize: 28,
+        fontWeight: "800",
+        color: "#111827"
+    },
 
-  /**
-   * subtitle
-   * --------
-   * Supporting descriptive text.
-   */
-  subtitle: {
-    marginTop: 12,               // Space above subtitle
-    fontSize: 16,                // Standard readable size
-    lineHeight: 22,              // Line spacing for readability
-    color: "#6B7280",            // Muted gray text
-    textAlign: "center",         // Center text alignment
-    maxWidth: 320,               // Prevent text from stretching too wide
-    marginBottom: 24,            // Space before the button
-  },
+    subtitle: {
+        marginTop: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        color: "#6B7280",
+        textAlign: "center",
+        maxWidth: 320,
+        marginBottom: 20
+    },
 
-  /**
-   * button
-   * ------
-   * Styling for the navigation button.
-   */
-  button: {
-    backgroundColor: "#2563EB",  // Primary blue color
-    paddingHorizontal: 20,       // Horizontal padding inside button
-    paddingVertical: 14,         // Vertical padding inside button
-    borderRadius: 14,            // Rounded button edges
-  },
+    search: {
+        height: 44,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        fontSize: 16,
+        textAlignVertical: "center",
+        width: 350,
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        marginBottom: 12
+    },
 
-  /**
-   * buttonText
-   * ----------
-   * Styling applied to the text inside the button.
-   */
-  buttonText: {
-    color: "#FFFFFF",            // White text
-    fontSize: 16,                // Medium text size
-    fontWeight: "700",           // Bold font
-  },
+    filterRow: {
+        flexDirection: "row",
+        gap: 8,
+        marginBottom: 10
+    },
+
+    filterButton: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 10,
+        backgroundColor: "#F3F4F6"
+    },
+
+    filterActive: {
+        backgroundColor: "#84aafc"
+    },
+
+    alertRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        borderRadius: 12,
+        backgroundColor: "#f0f0f0"
+    },
+
+    alertRowUnread: {
+        borderLeftWidth: 3,
+        borderColor: "#2563EB"
+    },
+
+    alertRowHighRisk: {
+        backgroundColor: "#ffc0c0"
+    },
+
+    alertRowMediumRisk: {
+        backgroundColor: "#ffe0c0"
+    },
+
+    alertRowLowRisk: {
+        backgroundColor: "#ffffc0"
+    },
+
+    txDescription: {
+        fontWeight: "600",
+        fontSize: 16
+    },
+
+    txMeta: {
+        fontSize: 13,
+        color: "#6B7280"
+    },
+
+    amount: {
+        fontWeight: "700",
+        fontSize: 16
+    },
+
+    primaryButton: {
+        backgroundColor: "#2563EB",
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderRadius: 14,
+        marginTop: 14,
+        width: "100%"
+    },
+
+    primaryButtonText: {
+        color: "#FFFFFF",
+        fontSize: 16,
+        fontWeight: "700",
+        textAlign: "center"
+    },
+
+    secondaryButton: {
+        marginTop: 12,
+        borderWidth: 2,
+        borderColor: "#2563EB",
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderRadius: 14,
+        width: "100%"
+    },
+
+    secondaryButtonText: {
+        color: "#2563EB",
+        fontSize: 16,
+        fontWeight: "700",
+        textAlign: "center"
+
+    },
+
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: "#CBD5F5",
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: 10
+    },
+
+    checkboxSelected: {
+        backgroundColor: "#2563EB",
+        borderColor: "#2563EB"
+    },
+
+    multiDeleteContainer: {
+        position: "absolute",
+        bottom: 20,
+        left: 20,
+        right: 20
+    },
+
+    deleteSelectedButton: {
+        backgroundColor: "#DC2626",
+        paddingHorizontal: 18,
+        paddingVertical: 10,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center"
+    },
+
+    deleteBar: {
+        backgroundColor: "#FEF2F2",
+        borderRadius: 12,
+        padding: 14,
+        marginTop: 10,
+        marginBottom: 10,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%"
+    },
+
+    deleteText: {
+        fontWeight: "400",
+        color: "#991B1B"
+    },
+
+    categoryContainer: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+        marginTop: 10
+    },
+
+    categoryChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        backgroundColor: "#F3F4F6"
+    },
+
+    categoryChipSelected: {
+        backgroundColor: "#2563EB"
+    },
+
+    categoryChipText: {
+        fontSize: 14,
+        color: "#374151"
+    },
+
+    categoryChipTextSelected: {
+        color: "#FFFFFF",
+        fontWeight: "600"
+    },
+
+    segmentButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: "#F3F4F6",
+        alignItems: "center",
+        marginHorizontal: 4
+    },
+    segmentActive: {
+        backgroundColor: "#2563EB"
+    },
+    segmentText: {
+        fontSize: 16,
+        color: "#374151"
+    },
+    segmentTextActive: {
+        color: "#FFFFFF",
+        fontWeight: "700"
+    },
+    segment: {
+        flexDirection: "row",
+        gap: 8,
+        marginVertical: 16
+    },
+    infoChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        backgroundColor: "#F3F4F6"
+    },
+    largeNumber: {
+        fontSize: 36,
+        fontWeight: "bold",
+        textAlign: "center",
+        color: "#000"
+    },
+    highRisk: {
+        fontWeight: "bold",
+        color: "#DC2626",
+    }
 });
