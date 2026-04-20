@@ -71,10 +71,14 @@ export default function BudgetScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [autoBudgetModalVisible, setAutoBudgetModalVisible] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
 
   const [category, setCategory] = useState("");
+  const [autoBudgetCategory, setAutoBudgetCategory] = useState("");
   const [categoryPopupVisible, setCategoryPopupVisible] = useState(false);
+  const [autoBudgetCategoryPopupVisible, setAutoBudgetCategoryPopupVisible] =
+    useState(false);
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
 
@@ -140,6 +144,107 @@ export default function BudgetScreen() {
     transactions
       .filter((t) => t.category === cat)
       .reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+
+  const resetAutoBudgetForm = () => {
+    setAutoBudgetModalVisible(false);
+    setAutoBudgetCategory("");
+    setAutoBudgetCategoryPopupVisible(false);
+  };
+
+  const createAutoBudget = async () => {
+    if (!autoBudgetCategory) {
+      setErrorMessage("Please select a category to auto create a budget.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user) return;
+
+      const { data: existingBudget, error: existingBudgetError } = await supabase
+        .from("budgets")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("category", autoBudgetCategory)
+        .eq("month", monthStr)
+        .maybeSingle();
+
+      if (existingBudgetError) {
+        console.log("Existing budget check error:", existingBudgetError);
+        setErrorMessage(existingBudgetError.message);
+        setErrorModalVisible(true);
+        return;
+      }
+
+      if (existingBudget) {
+        setErrorMessage(
+          "A budget for this category already exists in the selected month."
+        );
+        setErrorModalVisible(true);
+        return;
+      }
+
+      const { data: previousBudgets, error: historyError } = await supabase
+        .from("budgets")
+        .select("amount, month")
+        .eq("user_id", user.id)
+        .eq("category", autoBudgetCategory)
+        .lt("month", monthStr)
+        .order("month", { ascending: false })
+        .limit(6);
+
+      if (historyError) {
+        console.log("Budget history error:", historyError);
+        setErrorMessage(historyError.message);
+        setErrorModalVisible(true);
+        return;
+      }
+
+      if (!previousBudgets || previousBudgets.length === 0) {
+        setErrorMessage(
+          "No previous budgets were found for this category. Create one manually first."
+        );
+        setErrorModalVisible(true);
+        return;
+      }
+
+      const totalAmount = previousBudgets.reduce(
+        (sum, budget) => sum + (Number(budget.amount) || 0),
+        0
+      );
+      const predictedAmount = Number(
+        (totalAmount / previousBudgets.length).toFixed(2)
+      );
+
+      const { error: insertError } = await supabase.from("budgets").insert({
+        user_id: user.id,
+        category: autoBudgetCategory,
+        amount: predictedAmount,
+        spent: getSpent(autoBudgetCategory),
+        purpose: `Auto-created from ${previousBudgets.length} previous budget${
+          previousBudgets.length === 1 ? "" : "s"
+        }`,
+        month: monthStr,
+      });
+
+      if (insertError) {
+        console.log("Auto budget insert error:", insertError);
+        setErrorMessage(insertError.message);
+        setErrorModalVisible(true);
+        return;
+      }
+
+      resetAutoBudgetForm();
+      fetchData();
+    } catch (err) {
+      console.log("Auto budget error:", err);
+      setErrorMessage("Something went wrong while auto creating the budget.");
+      setErrorModalVisible(true);
+    }
+  };
 
  /* SAVE BUDGET */
 const saveBudget = async () => {
@@ -421,6 +526,13 @@ const saveBudget = async () => {
         <Text style={styles.primaryButtonText}>Add Budget</Text>
       </Pressable>
 
+      <Pressable
+        style={styles.secondaryButton}
+        onPress={() => setAutoBudgetModalVisible(true)}
+      >
+        <Text style={styles.secondaryButtonText}>Auto Create Budget</Text>
+      </Pressable>
+
       {/* Add/Edit Budget Modal */}
       {modalVisible && (
         <View style={styles.modal}>
@@ -472,6 +584,45 @@ const saveBudget = async () => {
         </View>
       )}
 
+      {/* Auto Create Budget Modal */}
+      {autoBudgetModalVisible && (
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Auto Create Budget</Text>
+            <Text style={styles.helperText}>
+              Pick a category and we will use up to the 6 most recent budgets in
+              that category to predict this month's amount.
+            </Text>
+
+            <Pressable
+              style={styles.dropdownInput}
+              onPress={() => setAutoBudgetCategoryPopupVisible(true)}
+            >
+              <Text style={{ color: autoBudgetCategory ? "#000" : "#6B7280" }}>
+                {autoBudgetCategory || "Select Category"}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </Pressable>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.secondaryButton, { flex: 1 }]}
+                onPress={resetAutoBudgetForm}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.primaryButton, { flex: 1 }]}
+                onPress={createAutoBudget}
+              >
+                <Text style={styles.primaryButtonText}>Create</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Category Popup */}
       {categoryPopupVisible && (
         <View style={styles.modal}>
@@ -494,6 +645,35 @@ const saveBudget = async () => {
             <Pressable
               style={[styles.secondaryButton, { marginTop: 12 }]}
               onPress={() => setCategoryPopupVisible(false)}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Auto Budget Category Popup */}
+      {autoBudgetCategoryPopupVisible && (
+        <View style={styles.modal}>
+          <View style={[styles.modalContent, { maxHeight: "70%" }]}>
+            <Text style={styles.modalTitle}>Select Category</Text>
+            <ScrollView>
+              {CATEGORIES.map((cat) => (
+                <Pressable
+                  key={cat}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setAutoBudgetCategory(cat);
+                    setAutoBudgetCategoryPopupVisible(false);
+                  }}
+                >
+                  <Text>{cat}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              onPress={() => setAutoBudgetCategoryPopupVisible(false)}
             >
               <Text style={styles.secondaryButtonText}>Cancel</Text>
             </Pressable>
@@ -621,6 +801,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     marginBottom: 12,
+  },
+  helperText: {
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 16,
+    lineHeight: 20,
   },
   dropdownInput: {
     borderWidth: 1,
