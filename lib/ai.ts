@@ -65,7 +65,7 @@ export const QUICK_QUESTIONS: QuickQuestion[] = [
 
 // Paste your current Codespaces forwarded URL here.
 // Example: const BACKEND_URL = "https://your-name-3001.app.github.dev";
-const BACKEND_URL = "https://zany-funicular-974v7r954qrj24q7-3001.app.github.dev";
+const BACKEND_URL = "https://reactnativebackendai.onrender.com";
 
 function formatMoney(amount: number): string {
   return `$${Math.abs(amount).toFixed(2)}`;
