@@ -164,7 +164,12 @@ export default function SignUpScreen() {
 
     // Trim inputs to prevent whitespace issues
     const trimmedFullName = fullName.trim();
-    const identifier = emailOrPhone.trim();
+    const identifier =
+      mode === "phone"
+        ? emailOrPhone.trim().startsWith("+")
+          ? emailOrPhone.trim()
+          : `+1${emailOrPhone.trim()}`
+        : emailOrPhone.trim();
 
     /**
      * Validation layer (client-side)
@@ -204,13 +209,23 @@ export default function SignUpScreen() {
     const payload = buildSignUpPayload(mode, identifier, password, trimmedFullName);
 
     // Perform signup request
-    const { error } = await supabase.auth.signUp(payload);
+    const { data, error } = await supabase.auth.signUp(payload);
 
     setLoading(false);
 
     // If backend returns error, show it to user
     if (error) {
       setAuthError(error.message);
+      return;
+    }
+
+    // handle email/phone confirmation
+    if (!data?.session) {
+      setAuthError(
+        mode === "email"
+          ? "Check your email to confirm your account."
+          : "Check your phone for verification."
+      );
       return;
     }
 
@@ -676,6 +691,6 @@ const styles = StyleSheet.create({
   signInLink: {
     color: "#1D4ED8",
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "700",  
   },
 });

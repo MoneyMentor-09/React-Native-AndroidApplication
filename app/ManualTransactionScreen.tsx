@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -20,10 +20,27 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { createTransaction } from "../lib/transactions";
 import { router } from "expo-router/build/exports";
 
-const categories = [
-  "Food","Transport","Shopping","Entertainment","Bills & Utilities","Health",
-  "Education","Travel","Groceries","Gas","Insurance","Salary",
-  "Freelance","Investment","Other"
+const expenseCategories = [
+  "Food & Dining",
+  "Transportation",
+  "Shopping",
+  "Entertainment",
+  "Bills & Utilities",
+  "Healthcare",
+  "Education",
+  "Travel",
+  "Groceries",
+  "Gas",
+  "Rent",
+  "Insurance",
+  "Other Expense"
+];
+
+const incomeCategories = [
+  "Salary",
+  "Freelance",
+  "Investments",
+  "Other Income"
 ];
 
 export default function ManualTransactionScreen() {
@@ -34,8 +51,13 @@ export default function ManualTransactionScreen() {
   const [showCategories, setShowCategories] = useState(false);
   const [date, setDate] = useState(new Date());
   const [showDate, setShowDate] = useState(false);  
-
-
+  const availableCategories =  type === "income" ? incomeCategories : expenseCategories;
+    useEffect(() => {
+      if (type === "income") {
+        setCategory("Salary");
+      }
+    }, [type]);
+    
   // Amount validation
   function handleAmountChange(text: string) {
     const regex = /^\d*(\.\d{0,2})?$/;
@@ -178,7 +200,7 @@ export default function ManualTransactionScreen() {
             </TouchableWithoutFeedback>
             <View style={styles.modalContent}>
               <FlatList
-                data={categories}
+                data={availableCategories}
                 keyExtractor={(item) => item}
                 renderItem={({ item }) => (
                   <Pressable

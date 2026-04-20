@@ -288,23 +288,23 @@ function getActivePreset(startDate: Date, endDate: Date): RangePreset | "custom"
   return "custom";
 }
 
-function shiftRange(startDate: Date, endDate: Date, preset: RangePreset | "custom", direction: 1 | -1) {
+function shiftRange(endDate: Date, startDate: Date, preset: RangePreset | "custom", direction: 1 | -1) {
   if (preset === "week") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setDate(nextEndDate.getDate() + direction * 7);
-    return getPresetRange("week", nextEndDate);
+    const nextStartDate = new Date(endDate);
+    nextStartDate.setDate(nextStartDate.getDate() + direction * 7);
+    return getPresetRange("week", nextStartDate);
   }
 
   if (preset === "month") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setMonth(nextEndDate.getMonth() + direction);
-    return getPresetRange("month", nextEndDate);
+    const nextStartDate = new Date(endDate);
+    nextStartDate.setMonth(nextStartDate.getMonth() + direction);
+    return getPresetRange("month", nextStartDate);
   }
 
   if (preset === "year") {
-    const nextEndDate = new Date(endDate);
-    nextEndDate.setFullYear(nextEndDate.getFullYear() + direction);
-    return getPresetRange("year", nextEndDate);
+    const nextStartDate = new Date(endDate);
+    nextStartDate.setFullYear(nextStartDate.getFullYear() + direction);
+    return getPresetRange("year", nextStartDate);
   }
 
   const rangeLengthInDays = Math.max(
@@ -503,6 +503,19 @@ function buildCurrentMonthExpenseForecast(
   };
 }
 
+function getRangeInDays(startDate: Date, endDate: Date): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  return Math.max(
+    1,
+    Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  );
+}
+
 /**
  * buildDashboardMetrics
  * ---------------------
@@ -586,11 +599,8 @@ function buildDashboardMetrics(
   // is still generated so the screen can support that section when enabled.
   let spendingTrend: Array<{ label: string; total: number }> = [];
 
-  const rangeInDays = Math.max(
-    1,
-    Math.ceil((endExclusive.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
-  );
-  const weekCount = Math.ceil(rangeInDays / 7);
+const rangeInDays = getRangeInDays(startDate, endDate);
+const weekCount = Math.ceil(rangeInDays / 7);
 
   spendingTrend = Array.from({ length: weekCount }, (_, index) => {
     const weekStart = new Date(start);
@@ -884,7 +894,7 @@ export default function DashboardScreen() {
   const spendingForecast = buildCurrentMonthExpenseForecast(transactions);
   const activePreset = getActivePreset(startDate, endDate);
   const isCustomRange = selectedQuickRange === null && activePreset === "custom";
-  const overviewHint = isAllTimeRange ? "Tap to choose a different range" : "Swipe charts to browse periods";
+  const overviewHint = isAllTimeRange ? "Tap to choose a different range" : `${getRangeInDays(startDate, endDate)} days, ${metrics.recentTransactions.length} transactions`;
   const comparisonMax = Math.max(metrics.periodExpenseTotal, metrics.periodIncomeTotal, 1);
   const expenseBarHeight = Math.max(
     (metrics.periodExpenseTotal / comparisonMax) * 88,
@@ -971,10 +981,37 @@ export default function DashboardScreen() {
     }
   };
   const handlePeriodShift = (direction: 1 | -1) => {
-    const nextRange =
-      selectedQuickRange !== null
-        ? shiftQuickPresetRange(selectedQuickRange, endDate, direction)
-        : shiftRange(startDate, endDate, activePreset, direction);
+    const base = new Date(startDate);
+
+    // Normalize to start of month for stability
+    base.setDate(1);
+    base.setHours(0, 0, 0, 0);
+
+    if (selectedQuickRange === "this_month") {
+      base.setMonth(base.getMonth() + direction);
+
+      const nextStart = new Date(base);
+      const nextEnd = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+
+      setStartDate(nextStart);
+      setEndDate(nextEnd);
+      return;
+    }
+
+    if (selectedQuickRange === "this_week") {
+      base.setDate(base.getDate() + direction * 7);
+
+      const nextStart = new Date(base);
+      const nextEnd = new Date(base);
+      nextEnd.setDate(nextStart.getDate() + 6);
+
+      setStartDate(nextStart);
+      setEndDate(nextEnd);
+      return;
+    }
+
+    // fallback (custom range)
+    const nextRange = shiftRange(startDate, endDate, activePreset, direction);
     setStartDate(nextRange.startDate);
     setEndDate(nextRange.endDate);
   };
