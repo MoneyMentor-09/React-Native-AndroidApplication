@@ -50,6 +50,61 @@ import { signInWithOAuth } from "../lib/auth";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
+type SignUpMode = "email" | "phone";
+
+function validateSignUpForm(
+  fullName: string,
+  identifier: string,
+  password: string,
+  confirmPassword: string,
+  mode: SignUpMode,
+) {
+  const validationErrors: string[] = [];
+
+  if (!fullName) {
+    validationErrors.push("Full name is required.");
+  }
+
+  if (!identifier) {
+    validationErrors.push(
+      mode === "email"
+        ? "Email address is required."
+        : "Phone number is required."
+    );
+  }
+
+  if (password.length < 8) {
+    validationErrors.push("Password must be at least 8 characters.");
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    validationErrors.push("Password must include at least one uppercase letter.");
+  }
+
+  if (!/\d/.test(password)) {
+    validationErrors.push("Password must include at least one number.");
+  }
+
+  if (password !== confirmPassword) {
+    validationErrors.push("Passwords do not match.");
+  }
+
+  return validationErrors;
+}
+
+function buildSignUpPayload(
+  mode: SignUpMode,
+  identifier: string,
+  password: string,
+  fullName: string,
+) {
+  const options = { data: { full_name: fullName } };
+
+  return mode === "email"
+    ? { email: identifier, password, options }
+    : { phone: identifier, password, options };
+}
+
 export default function SignUpScreen() {
   /**
    * ==========================================================
@@ -62,7 +117,7 @@ export default function SignUpScreen() {
    */
 
   // Determines signup method (email vs phone)
-  const [mode, setMode] = useState<"email" | "phone">("email");
+  const [mode, setMode] = useState<SignUpMode>("email");
 
   // Form field states
   const [fullName, setFullName] = useState("");
@@ -109,10 +164,12 @@ export default function SignUpScreen() {
 
     // Trim inputs to prevent whitespace issues
     const trimmedFullName = fullName.trim();
-    const identifier = emailOrPhone.trim();
-
-    // Collect all validation errors at once
-    const validationErrors: string[] = [];
+    const identifier =
+      mode === "phone"
+        ? emailOrPhone.trim().startsWith("+")
+          ? emailOrPhone.trim()
+          : `+1${emailOrPhone.trim()}`
+        : emailOrPhone.trim();
 
     /**
      * Validation layer (client-side)
@@ -120,35 +177,13 @@ export default function SignUpScreen() {
      * This improves UX by catching obvious issues
      * before making a network request.
      */
-
-    if (!trimmedFullName) {
-      validationErrors.push("Full name is required.");
-    }
-
-    if (!identifier) {
-      validationErrors.push(
-        mode === "email"
-          ? "Email address is required."
-          : "Phone number is required."
-      );
-    }
-
-    // Password strength checks
-    if (password.length < 8) {
-      validationErrors.push("Password must be at least 8 characters.");
-    }
-
-    if (!/[A-Z]/.test(password)) {
-      validationErrors.push("Password must include at least one uppercase letter.");
-    }
-
-    if (!/\d/.test(password)) {
-      validationErrors.push("Password must include at least one number.");
-    }
-
-    if (password !== confirmPassword) {
-      validationErrors.push("Passwords do not match.");
-    }
+    const validationErrors = validateSignUpForm(
+      trimmedFullName,
+      identifier,
+      password,
+      confirmPassword,
+      mode,
+    );
 
     // If any validation fails, display them and stop execution
     if (validationErrors.length > 0) {
@@ -166,30 +201,31 @@ export default function SignUpScreen() {
     setLoading(true);
 
     /**
-     * Attach additional metadata to Supabase user.
-     * This becomes accessible in user metadata.
-     */
-    const options = { data: { full_name: trimmedFullName } };
-
-    /**
      * Payload structure depends on signup mode.
      * Supabase accepts either:
      * - { email, password }
      * - { phone, password }
      */
-    const payload =
-      mode === "email"
-        ? { email: identifier, password, options }
-        : { phone: identifier, password, options };
+    const payload = buildSignUpPayload(mode, identifier, password, trimmedFullName);
 
     // Perform signup request
-    const { error } = await supabase.auth.signUp(payload);
+    const { data, error } = await supabase.auth.signUp(payload);
 
     setLoading(false);
 
     // If backend returns error, show it to user
     if (error) {
       setAuthError(error.message);
+      return;
+    }
+
+    // handle email/phone confirmation
+    if (!data?.session) {
+      setAuthError(
+        mode === "email"
+          ? "Check your email to confirm your account."
+          : "Check your phone for verification."
+      );
       return;
     }
 
@@ -655,6 +691,6 @@ const styles = StyleSheet.create({
   signInLink: {
     color: "#1D4ED8",
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "700",  
   },
 });
