@@ -355,8 +355,9 @@ onPress={()=>setFilterType("expense")}
 </View>
 
 
-<Modal visible={editModalVisible} animationType="slide">
-  <View style={{ flex: 1, padding: 20, backgroundColor: "#fff" }}>
+<Modal visible={editModalVisible} transparent animationType="fade">
+  <View style={styles.editModalOverlay}>
+  <View style={styles.editModalCard}>
 
     {/* HEADER */}
     <Text style={{ fontSize: 20, fontWeight: "700", marginBottom: 20 }}>
@@ -511,28 +512,23 @@ onPress={()=>setFilterType("expense")}
     </Pressable>
 
     {/* DELETE */}
-    <Pressable
-      style={[
-        styles.secondaryButton,
-        { borderColor: "#DC2626" }
-      ]}
-      onPress={() => {
-        if (editingTransaction) {
-          setEditModalVisible(false);
-          confirmSingleDelete(editingTransaction.id);
-        }
-      }}
-    >
-      <Text
-        style={[
-          styles.secondaryButtonText,
-          { color: "#DC2626" }
-        ]}
+    <View style={styles.deleteActionRow}>
+      <Pressable
+        style={styles.deleteActionButton}
+        onPress={() => {
+          if (editingTransaction) {
+            setEditModalVisible(false);
+            confirmSingleDelete(editingTransaction.id);
+          }
+        }}
       >
-        Delete Transaction
-      </Text>
-    </Pressable>
+        <Text style={styles.deleteActionText}>
+          Delete Transaction
+        </Text>
+      </Pressable>
+    </View>
 
+  </View>
   </View>
 </Modal>
 <Modal
@@ -919,6 +915,34 @@ menuText: {
   borderRadius:14,
   paddingHorizontal:48,
   paddingVertical:10
+},
+editModalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.3)",
+  justifyContent: "center",
+  paddingHorizontal: 16,
+},
+editModalCard: {
+  backgroundColor: "#fff",
+  borderRadius: 18,
+  padding: 20,
+  maxHeight: "82%",
+},
+deleteActionRow: {
+  alignItems: "flex-end",
+  marginTop: 12,
+},
+deleteActionButton: {
+  borderWidth: 1,
+  borderColor: "#DC2626",
+  borderRadius: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+},
+deleteActionText: {
+  color: "#DC2626",
+  fontWeight: "600",
+  fontSize: 13,
 }
 
 });
