@@ -259,13 +259,9 @@ const renderTransaction = ({ item }: { item: Transaction }) => {
           handleEditTransaction(item);
         }
       }}
-          onLongPress={() => {
-      if (!isSelectionMode) {
+      onLongPress={() => {
         toggleSelectTransaction(item.id);
-      } else {
-        toggleSelectTransaction(item.id);
-      }
-    }}
+      }}
     >
       <View style={{ flex: 1 }}>
         <Text style={styles.txDescription}>
