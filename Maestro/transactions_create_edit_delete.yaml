@@ -12,7 +12,7 @@ appId: com.moneymentor.mobile
 - tapOn: "0.00"
 - inputText: "12.50"
 - tapOn: "Category"
-- tapOn: "Food"
+- tapOn: "Food & Dining"
 - tapOn: "Save Transaction"
 - assertVisible: "Success"
 - tapOn: "OK"
