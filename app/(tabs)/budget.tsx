@@ -651,7 +651,44 @@ const renderBudget = ({ item }: { item: Budget }) => {
         </View>
       )}
 
-      
+      {/* Auto Create Budget Modal */}
+      {autoBudgetModalVisible && (
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Auto Create Budget</Text>
+            <Text style={styles.helperText}>
+              Pick a category and we will use up to the 6 most recent budgets in
+              that category to predict this month's amount.
+            </Text>
+
+            <Pressable
+              style={styles.dropdownInput}
+              onPress={() => setAutoBudgetCategoryPopupVisible(true)}
+            >
+              <Text style={{ color: autoBudgetCategory ? "#000" : "#6B7280" }}>
+                {autoBudgetCategory || "Select Category"}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </Pressable>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.secondaryButton, { flex: 1 }]}
+                onPress={resetAutoBudgetForm}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.primaryButton, { flex: 1 }]}
+                onPress={createAutoBudget}
+              >
+                <Text style={styles.primaryButtonText}>Create</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Category Popup */}
       {categoryPopupVisible && (
