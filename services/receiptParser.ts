@@ -36,7 +36,7 @@ function parseDate(text: string): string | undefined {
 }
 
 function parseMoneyValue(raw: string): number | undefined {
-  const normalized = raw.replace(/[$,\s]/g, "");
+  const normalized = raw.replaceAll(/[$,\s]/g, "");
   const amount = Number(normalized);
   if (Number.isNaN(amount) || amount <= 0) {
     return undefined;
@@ -143,7 +143,7 @@ function scoreVendorLine(line: string, index: number): number {
   score += Math.max(0, 12 - index * 2);
   score += Math.max(0, 12 - trimmed.length / 2);
 
-  const upperOnly = trimmed.replace(/[^A-Za-z]/g, "");
+  const upperOnly = trimmed.replaceAll(/[^A-Za-z]/g, "");
   const isAllCaps = upperOnly.length > 0 && upperOnly === upperOnly.toUpperCase();
   if (isAllCaps) {
     score += 6;
@@ -169,8 +169,8 @@ function scoreVendorLine(line: string, index: number): number {
 }
 
 function normalizeVendor(line: string): string {
-  const cleaned = line.replace(/\s{2,}/g, " ").trim();
-  return cleaned.replace(/\s?#\d+\b/g, "").trim();
+  const cleaned = line.replaceAll(/\s{2,}/g, " ").trim();
+  return cleaned.replaceAll(/\s?#\d+\b/g, "").trim();
 }
 
 function findVendor(lines: string[]): string | undefined {
