@@ -1,0 +1,39 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+- runFlow: _login.yaml
+- tapOn: "Budget"
+- assertVisible: "Add Budget"
+- tapOn: "Add Budget"
+- assertVisible: "Select Category"
+- tapOn: "Select Category"
+- scrollUntilVisible: 
+    element: "Transportation"
+- tapOn: "Transportation"
+- tapOn: "Amount ($)"
+- inputText: "250"
+- tapOn: "Purpose"
+- inputText: "Maestro test budget"
+- tapOn: "Save"
+- assertVisible: "Transportation"
+- tapOn: "Add Budget"
+- tapOn: "Select Category"
+- scrollUntilVisible: 
+    element: "Transportation"
+- tapOn: "Transportation"
+- tapOn: "Amount ($)"
+- inputText: "300"
+- tapOn: "Purpose"
+- inputText: "Duplicate should fail"
+- tapOn: "Save"
+- assertVisible: "Error"
+- assertVisible: "You already have a budget for this category in this month."
+- tapOn: "OK"
+- tapOn: "Cancel"
+- tapOn: "Transportation"
+- assertVisible: "Edit Budget"
+- tapOn: "Delete Budget"
+- assertVisible: "Delete Budget"
+- tapOn: "Delete"
+- assertNotVisible: "Maestro test budget"

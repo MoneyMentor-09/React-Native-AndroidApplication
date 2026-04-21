@@ -1,0 +1,30 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Get Started for Free"
+- tapOn: "Get Started for Free"
+- assertVisible: "Create your account"
+- tapOn: "Create Account"
+- assertVisible: "Full name"
+- assertVisible: "Email address"
+- assertVisible: "Password"
+- tapOn: "Phone"
+- tapOn: "Full name"
+- inputText: "Maestro Test User"
+- tapOn: "Phone number"
+- inputText: "5551234567"
+- tapOn: "Password"
+- inputText: "weakpass"
+- scrollUntilVisible: 
+    element: "Confirm password"
+- tapOn:
+    id: "content"
+- tapOn: "Confirm password"
+- inputText: "differentpass"
+- tapOn:
+    id: "content"
+- tapOn: "Create Account"
+- assertVisible: "Password must include at least one uppercase letter."
+- assertVisible: "Password must include at least one number."
+- assertVisible: "Passwords do not match."

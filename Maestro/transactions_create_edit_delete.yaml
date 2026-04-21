@@ -1,0 +1,31 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+- runFlow: _login.yaml
+- tapOn: "Transactions"
+- assertVisible: "Search transactions..."
+- tapOn: "Add Manually"
+- assertVisible: "Manual Transaction"
+- tapOn: "Description"
+- inputText: "Maestro Coffee"
+- tapOn: "0.00"
+- inputText: "12.50"
+- tapOn: "Category"
+- tapOn: "Food"
+- tapOn: "Save Transaction"
+- assertVisible: "Success"
+- tapOn: "OK"
+- assertVisible: "Maestro Coffee"
+- tapOn: "Maestro Coffee"
+- assertVisible: "Edit Transaction"
+- tapOn: "Description"
+- eraseText
+- inputText: "Maestro Coffee Updated"
+- tapOn: "Save Changes"
+- assertVisible: "Maestro Coffee Updated"
+- tapOn: "Maestro Coffee Updated"
+- tapOn: "Delete Transaction"
+- assertVisible: "Confirm Delete"
+- tapOn: "Delete"
+- assertNotVisible: "Maestro Coffee Updated"
