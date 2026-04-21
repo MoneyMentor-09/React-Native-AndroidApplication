@@ -44,12 +44,44 @@ function parseMoneyValue(raw: string): number | undefined {
   return amount;
 }
 
+function isValidMoneyToken(token: string): boolean {
+  let index = 0;
+
+  if (token[index] === "$") {
+    index += 1;
+  }
+
+  const decimalIndex = token.indexOf(".", index);
+  const integerPart = decimalIndex === -1 ? token.slice(index) : token.slice(index, decimalIndex);
+  const decimalPart = decimalIndex === -1 ? "" : token.slice(decimalIndex + 1);
+
+  if (integerPart.length === 0 || !/^\d+(,\d+)*$/.test(integerPart)) {
+    return false;
+  }
+
+  if (integerPart.includes(",")) {
+    const groups = integerPart.split(",");
+    if (groups[0].length < 1 || groups[0].length > 3) {
+      return false;
+    }
+    if (groups.slice(1).some((group) => group.length !== 3)) {
+      return false;
+    }
+  }
+
+  return decimalPart.length === 2 && /^\d{2}$/.test(decimalPart);
+}
+
+function extractMoneyTokens(text: string): string[] {
+  return text.match(/\$?[\d,.]+/g)?.filter(isValidMoneyToken) ?? [];
+}
+
 function findAmount(lines: string[], rawText: string): number | undefined {
   for (const line of lines) {
     if (/total/i.test(line) && !/subtotal/i.test(line)) {
-      const amountMatch = line.match(/([$]?\d{1,3}(?:,\d{3})*(?:\.\d{2})|[$]?\d+(?:\.\d{2}))/i);
+      const amountMatch = extractMoneyTokens(line)[0];
       if (amountMatch) {
-        const value = parseMoneyValue(amountMatch[1]);
+        const value = parseMoneyValue(amountMatch);
         if (value !== undefined) {
           return value;
         }
@@ -57,7 +89,7 @@ function findAmount(lines: string[], rawText: string): number | undefined {
     }
   }
 
-  const allMatches = rawText.match(/\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})|\$?\d+(?:\.\d{2})/g);
+  const allMatches = extractMoneyTokens(rawText);
   if (!allMatches || allMatches.length === 0) {
     return undefined;
   }
