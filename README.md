@@ -167,7 +167,7 @@ Internal and external contributors should:
 3. Verify core user flows before opening a PR.
 4. Include screenshots or short recordings for UI-impacting changes.
 
-## License
+<!-- ## License
 
 No license file is currently included in this repository.
-Add a `LICENSE` file if you plan to distribute this project externally.
+Add a `LICENSE` file if you plan to distribute this project externally. -->
