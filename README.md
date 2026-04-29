@@ -1,136 +1,173 @@
-# MoneyMentor Mobile (Expo)
+# Money Mentor Mobile
 
-This project is an Expo app (with Expo Router). The recommended way to run it is on your phone using Expo Go.
+Money Mentor Mobile is a React Native application that helps users manage personal finances through transaction tracking, budgeting, receipt capture, and proactive spending alerts.
 
-## 1) Prerequisites
+## Overview
 
-Install these first:
+This repository contains the mobile client for Money Mentor, built with Expo and TypeScript. The app is designed to support day-to-day money management with a balance of automation (OCR receipt parsing, alert generation) and manual controls (budget planning, transaction editing).
 
-- Node.js 20 LTS (recommended)
-- npm (comes with Node)
-- Git
+## Core Capabilities
 
-Check versions:
+- Secure authentication (email/password and Google OAuth)
+- Financial dashboard with date-range insights
+- Transaction management (manual entry, edit, search, filter, delete)
+- Receipt scanning and OCR-assisted data extraction
+- Category-based budget planning and monthly tracking
+- Alert center for suspicious/unusual activity patterns
+- In-app assistant integration scaffold for financial guidance
 
-```bash
-node -v
-npm -v
-git --version
+## Product Areas
+
+### Authentication & Access
+
+- Sign up and sign in flows
+- Supabase-backed session management
+- OAuth support via Google
+
+### Dashboard & Insights
+
+- Income vs expense summaries
+- Custom and preset time windows
+- Category-level spending visibility
+- Recent activity review
+- Forecast-style monthly expense projection
+
+### Transactions
+
+- Manual transaction creation
+- Receipt capture workflow:
+  - Capture/import image
+  - OCR text extraction
+  - Parsed draft review before save
+- Transaction editing and deletion
+- Bulk selection and bulk delete
+
+### Budgets
+
+- Month/year scoped budgets
+- Spend progress visualization per category
+- Auto-create budgets from historical values
+- Single and bulk deletion
+
+### Alerts
+
+- Suspicious transaction pattern analysis
+- Risk score-based alert presentation
+- Mark-as-read and mark-all-read actions
+- Alert dismissal and suppression of repeated patterns
+
+## Technology Stack
+
+- Expo SDK 54
+- React 19
+- React Native 0.81
+- Expo Router (file-based navigation)
+- TypeScript
+- Supabase (auth and data)
+- OCR.Space API (receipt OCR)
+
+## Repository Structure
+
+```text
+app/                  Expo Router routes and screens
+app/(tabs)/           Primary tab navigation screens
+components/           Shared UI components
+lib/                  Data, auth, AI, and transaction logic
+services/             OCR + receipt parsing services
+assets/               Icons and image assets
 ```
 
-## 2) Clone the repository
+## Prerequisites
 
-```bash
-git clone <YOUR_REPO_URL>
-cd "Moneymentor Github repo/React-Native-AndroidApplication"
-```
+- Node.js 20+ (LTS recommended)
+- npm
+- Expo Go (for mobile device testing)
+- Supabase project (with required tables)
 
-If you cloned into a different folder name, use that folder instead.
+## Environment Configuration
 
-## 3) Install dependencies
-
-```bash
-npm install
-```
-
-## 4) Configure environment variables
-
-Create or update `.env` in `React-Native-AndroidApplication/` with:
+Create a `.env` file in the project root:
 
 ```env
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_OCR_SPACE_API_KEY=your_ocr_space_api_key
 ```
 
-Important:
+Notes:
 
-- Variable names must start with `EXPO_PUBLIC_` so Expo can load them at runtime.
-- Keep real keys out of source control.
+- `EXPO_PUBLIC_OCR_SPACE_API_KEY` is optional.
+- If omitted, OCR uses the OCR.Space demo key (`helloworld`) with limited reliability/throughput.
 
-## 5) Run the app on your phone (recommended)
-
-1. Install Expo Go on your phone:
-- iOS: App Store
-- Android: Google Play Store
-
-2. Start the Expo dev server:
+## Getting Started
 
 ```bash
-npx expo start
-```
-
-Or:
-
-```bash
+npm install
 npm start
 ```
 
-3. Open the app on your phone:
-- iOS: open the Camera app and scan the QR code in the terminal/browser
-- Android: open Expo Go and scan the QR code
-
-Notes:
-- Your phone and computer should be on the same Wi-Fi network.
-- If QR connection has issues, press `t` in the Expo terminal to switch to Tunnel mode.
-
-## 6) Run the app on web (secondary option)
-
-```bash
-npx expo start --web
-```
-
-Or with npm script:
-
-```bash
-npm run web
-```
-
-Expo will start a dev server and open the app in your browser (usually `http://localhost:8081` or a nearby port).
-
-## 7) Other useful commands
-
-Start Expo dev server (all targets):
-
-```bash
-npx expo start
-```
-
-Run Android target:
+Run specific targets:
 
 ```bash
 npm run android
-```
-
-Run iOS target (macOS only):
-
-```bash
 npm run ios
+npm run web
 ```
 
-## 8) Common issues
+## Route Map
 
-Port already in use:
+- `/` Onboarding
+- `/login` Sign in
+- `/signup` Registration
+- `/(tabs)/dashboard`
+- `/(tabs)/transactions`
+- `/(tabs)/budget`
+- `/(tabs)/alerts`
+- `/ReceiptCaptureScreen`
+- `/ManualTransactionScreen`
+- `/profile`
 
-```bash
-npx expo start --web --port 8082
-```
+## Data Dependencies
 
-Stale cache:
+The app currently expects these Supabase tables:
 
-```bash
-npx expo start -c
-```
+- `transactions`
+- `budgets`
+- `alerts`
+- `dismissed_suspicious_alerts`
 
-Expo Go connection issues:
+Each table is expected to be user-scoped via `user_id` where applicable.
 
-- Ensure phone and computer are on the same network
-- Try Tunnel mode (`t` in terminal)
-- Re-open Expo Go and rescan QR code
+## AI Assistant Backend
 
-Missing env vars error:
+The assistant request endpoint is configured in `lib/ai.ts`:
 
-- Confirm `.env` is inside `React-Native-AndroidApplication/`
-- Confirm exact names:
-  - `EXPO_PUBLIC_SUPABASE_URL`
-  - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- Restart Expo after changing `.env`
+- `BACKEND_URL = https://reactnativebackendai.onrender.com`
+
+Update this value when switching environments.
+
+## Development Notes
+
+- Built with Expo Router conventions (`app/`-first routing).
+- Designed for mobile-first interaction patterns.
+- Supports iterative feature growth around insights, alerts, and assistant workflows.
+
+## Security & Privacy
+
+- Never commit real API keys or secrets.
+- Use environment-specific credentials for development/staging/production.
+- Review Supabase Row Level Security policies before deploying to production.
+
+## Contributing
+
+Internal and external contributors should:
+
+1. Create a feature branch from `main`.
+2. Keep changes scoped and documented.
+3. Verify core user flows before opening a PR.
+4. Include screenshots or short recordings for UI-impacting changes.
+
+## License
+
+No license file is currently included in this repository.
+Add a `LICENSE` file if you plan to distribute this project externally.
