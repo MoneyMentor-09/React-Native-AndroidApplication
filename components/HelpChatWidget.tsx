@@ -30,7 +30,7 @@ const starterMessage: ChatMessage = {
   id: "starter",
   role: "assistant",
   content:
-    "Hi! I’m your MoneyMentor help assistant. Ask me about spending, income, budgets, savings, or recent transactions.",
+    "Hi! I’m your MoneyMentor help assistant. Ask me about spending, income, budgets, savings, or recent transactions. If you want to build a budget, just say “I want to make a budget.”",
 };
 
 export default function HelpChatWidget() {
@@ -54,12 +54,14 @@ export default function HelpChatWidget() {
       content: question,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+
+    setMessages(updatedMessages);
     setLoading(true);
     setInput("");
 
     try {
-      const answer = await getHelpResponse(question);
+      const answer = await getHelpResponse(question, updatedMessages);
 
       const assistantMessage: ChatMessage = {
         id: createId(),
