@@ -12,7 +12,7 @@ import {
 } from "react-native";
 
 import { router, useFocusEffect } from "expo-router";
-import { AntDesign, Feather, FontAwesome5 } from "@expo/vector-icons";
+import { AntDesign, Feather } from "@expo/vector-icons";
 import { useState, useCallback } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import {
@@ -83,7 +83,6 @@ export default function AlertsScreen() {
     const unreadCount = alerts.filter((a) => !a.read).length
     const alertCount = alerts.length
     const highRiskCount = alerts.filter((a) => a.risk_score > 70).length
-    const budgetCount = alerts.filter((a) => a.type === "budget_warning").length
 
     const fetchAlerts = async () => {
         try {
@@ -192,8 +191,6 @@ export default function AlertsScreen() {
                     return !alert.read
                 case "fraud":
                     return alert.type === "fraud" || alert.risk_score > 70
-                case "budget":
-                    return alert.type === "budget_warning"
                 default:
                     return alert
             }
@@ -305,16 +302,25 @@ export default function AlertsScreen() {
     };
 
     // Add go to transactions handler
-    const handleGoToTransactions = (alertId: string) => {
-        router.push("/(tabs)/transactions")
+    const handleGoToTransactions = (alert: AlertMM) => {
+        router.push({
+            pathname: "/(tabs)/transactions",
+            params: {
+                alertPatternId: alert.suspicious_pattern_id ?? "",
+                alertTransactionId: alert.transaction_id ?? "",
+            },
+        })
     }
 
     const renderAlert = ({ item }: { item: AlertMM }) => {
 
         return (
 
-            <View style={[styles.alertRow, item.type === "fraud" || item.risk_score > 70 ? styles.alertRowHighRisk 
-                : item.risk_score > 30 ? styles.alertRowMediumRisk : styles.alertRowLowRisk, !item.read ? styles.alertRowUnread : null]}>
+            <Pressable
+                onPress={() => handleGoToTransactions(item)}
+                style={[styles.alertRow, item.type === "fraud" || item.risk_score > 70 ? styles.alertRowHighRisk
+                    : item.risk_score > 30 ? styles.alertRowMediumRisk : styles.alertRowLowRisk, !item.read ? styles.alertRowUnread : null]}
+            >
 
                 <View style={{ flex: 1 }}>
 
@@ -344,17 +350,13 @@ export default function AlertsScreen() {
                         </Pressable>
                     )}
 
-                    <Pressable onPress={() => handleGoToTransactions(item.id)}>
-                        <FontAwesome5 name="location-arrow" size={27} color="#000000" />
-                    </Pressable>
-
                     <Pressable onPress={() => handleDeleteAlert(item.id)}>
                         <Feather name="x-circle" size={30} color="#000000" />
                     </Pressable>
 
                 </View>
 
-            </View>
+            </Pressable>
 
         );
 
@@ -419,16 +421,6 @@ export default function AlertsScreen() {
                         onPress={() => setFilterType("fraud")}
                     >
                         <Text>Fraud ({highRiskCount})</Text>
-                    </Pressable>
-
-                    <Pressable
-                        style={[
-                            styles.filterButton,
-                            filterType === "budget" && styles.filterActive
-                        ]}
-                        onPress={() => setFilterType("budget")}
-                    >
-                        <Text>Budget ({budgetCount})</Text>
                     </Pressable>
 
                 </View>
