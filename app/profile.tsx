@@ -33,6 +33,7 @@ export default function ProfileScreen() {
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [isLogoutMode, setIsLogoutMode] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [error, setError] = useState("");               // Displays validation/auth errors
 
   
 
@@ -108,10 +109,12 @@ export default function ProfileScreen() {
   const handleChangePassword = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       Toast.show({ type: "error", text1: "New passwords do not match" });
+      setError("New passwords do not match");
       return;
     }
     if (passwordForm.newPassword.length < 8) {
       Toast.show({ type: "error", text1: "Password must be at least 8 characters" });
+      setError("Password must be at least 8 characters");
       return;
     }
 
@@ -123,6 +126,7 @@ export default function ProfileScreen() {
       });
       if (verifyError) {
         Toast.show({ type: "error", text1: "Current password is incorrect" });
+        setError("Current password is incorrect");
         return;
       }
       const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
@@ -130,11 +134,13 @@ export default function ProfileScreen() {
 
       Toast.show({ type: "success", text1: "Password updated successfully" });
       setIsPasswordMode(false);
+      setError("");
       setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
     } catch (err) {
       console.error("Change password error:", err);
       Toast.show({ type: "error", text1: "Failed to update password" });
+        setError("Failed to update password");
     }
   };
 
@@ -531,7 +537,7 @@ if (loading) {
       <View style={styles.modalButtons}>
         <Pressable
           style={[styles.secondaryButton, { flex: 1 }]}
-          onPress={() => setIsPasswordMode(false)}
+          onPress={() => (setIsPasswordMode(false), setError(""))}
         >
           <Text style={styles.secondaryButtonText}>Cancel</Text>
         </Pressable>
@@ -542,6 +548,8 @@ if (loading) {
           <Text style={styles.primaryButtonText}>Save</Text>
         </Pressable>
       </View>
+      {/* Conditionally render error only when a non-empty error exists */}
+      {!!error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   </View>
 )}
@@ -641,4 +649,5 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 16 },
   modalButtons: { flexDirection: "row", gap: 12, marginTop: 12 },
   centerState: { flex: 1, justifyContent: "center", alignItems: "center" },
+  errorText: { color: "#DC2626", marginTop: 4, fontSize: 14 },
 });
