@@ -2,7 +2,8 @@
 // -----------------
 // Stack is the top-level navigator used to define the app's screen hierarchy.
 // Each <Stack.Screen /> represents a route that can be pushed onto the navigation stack.
-import { Stack, useRouter } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
+import { useEffect } from "react";
 
 // StatusBar
 // ---------
@@ -17,6 +18,20 @@ import { Pressable, Text, View } from "react-native";
 // Provides safe area inset values to the entire app so screens can properly
 // avoid device notches, status bars, and gesture areas.
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { supabase } from "../lib/supabase";
+
+function isProtectedRoute(pathname: string): boolean {
+  return [
+    "/dashboard",
+    "/transactions",
+    "/budget",
+    "/alerts",
+    "/chat",
+    "/profile",
+    "/ReceiptCaptureScreen",
+    "/ManualTransactionScreen",
+  ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
 
 /**
  * RootLayout
@@ -33,6 +48,49 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
  */
 export default function RootLayout() {
   const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function redirectIfSignedOut() {
+      if (!isProtectedRoute(pathname)) {
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!isMounted || data.session) {
+        return;
+      }
+
+      // Clear protected screens from the stack before showing login. This
+      // prevents Android/iOS back navigation from reopening the dashboard.
+      if (router.canDismiss()) {
+        router.dismissAll();
+      }
+      router.replace("/");
+    }
+
+    void redirectIfSignedOut();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session || !isProtectedRoute(pathname)) {
+        return;
+      }
+
+      if (router.canDismiss()) {
+        router.dismissAll();
+      }
+      router.replace("/");
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [pathname, router]);
 
   return (
     // Makes safe area context available to all child screens and layouts.

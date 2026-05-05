@@ -1,5 +1,7 @@
 import { fetchTransactions, type Transaction } from "./transactions";
 
+// Chat messages are intentionally small because the backend only needs the
+// conversational role and text content, not UI state.
 export type ChatRole = "user" | "assistant";
 
 export type ChatMessage = {
@@ -14,6 +16,8 @@ export type QuickQuestion = {
   prompt: string;
 };
 
+// Preset prompts shown in the assistant UI. Labels stay short for button
+// display; prompts can be more explicit for the backend.
 export const QUICK_QUESTIONS: QuickQuestion[] = [
   { id: "q1", label: "Make a budget", prompt: "I want to make a budget." },
   {
@@ -65,10 +69,13 @@ export const QUICK_QUESTIONS: QuickQuestion[] = [
 
 const BACKEND_URL = "https://reactnativebackendai.onrender.com";
 
+// Display financial amounts as positive values in assistant context. The
+// transaction layer may store expenses as negative numbers.
 function formatMoney(amount: number): string {
   return `$${Math.abs(amount).toFixed(2)}`;
 }
 
+// Used to filter transactions for current-month assistant summaries.
 function getCurrentMonthKey(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -76,12 +83,17 @@ function getCurrentMonthKey(): string {
   return `${year}-${month}`;
 }
 
+// Invalid dates should sort last instead of throwing during conversation setup.
 function safeDate(dateString?: string): number {
   if (!dateString) return 0;
   const time = new Date(dateString).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
 
+/**
+ * Builds a compact financial snapshot that the backend assistant can use
+ * without needing direct database access.
+ */
 function buildTransactionContext(transactions: Transaction[]) {
   const currentMonthKey = getCurrentMonthKey();
 
@@ -90,6 +102,8 @@ function buildTransactionContext(transactions: Transaction[]) {
   const categoryTotals: Record<string, number> = {};
 
   const recentTransactions = [...transactions]
+    // Recent activity is based on created_at because users may enter older
+    // transaction dates long after the transaction was created in the app.
     .sort((a, b) => safeDate(b.created_at) - safeDate(a.created_at))
     .slice(0, 5)
     .map((t) => ({
@@ -115,6 +129,8 @@ function buildTransactionContext(transactions: Transaction[]) {
       }
     }
 
+    // Top categories are expense-only so income categories do not distort
+    // "where am I spending" style assistant answers.
     if (t.type === "expense") {
       const category = t.category?.trim() || "Uncategorized";
       categoryTotals[category] = (categoryTotals[category] || 0) + numericAmount;
@@ -152,6 +168,10 @@ function cleanMessagesForBackend(messages: ChatMessage[]) {
   }));
 }
 
+/**
+ * Fetches user transaction context, sends the user question to the assistant
+ * backend, and validates the response shape before returning visible text.
+ */
 export async function getHelpResponse(
   question: string,
   conversationMessages: ChatMessage[] = []
@@ -175,6 +195,8 @@ export async function getHelpResponse(
 
   let data: any = null;
 
+  // Read as text first so invalid JSON responses can be logged with useful
+  // server output instead of disappearing behind response.json().
   try {
     data = rawText ? JSON.parse(rawText) : null;
   } catch (error) {
@@ -189,6 +211,8 @@ export async function getHelpResponse(
     );
   }
 
+  // The UI expects a plain assistant message string. Treat missing or malformed
+  // replies as backend contract errors.
   if (!data?.reply || typeof data.reply !== "string") {
     throw new Error("Backend returned an invalid AI response.");
   }

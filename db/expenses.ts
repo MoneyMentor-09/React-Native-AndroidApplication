@@ -1,6 +1,8 @@
 import { supabase } from "../lib/supabase";
 import type { Expense, NewExpense } from "../types";
 
+// Compatibility shape for transaction rows that are exposed through the older
+// Expense-oriented API in this module.
 type TransactionRow = {
   id: number | string;
   description: string;
@@ -11,6 +13,8 @@ type TransactionRow = {
   created_at: string | null;
 };
 
+// Expense helpers are still user-scoped, so every read/write starts by
+// resolving the current Supabase auth session.
 async function getAuthenticatedUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
   if (error) {
@@ -25,6 +29,8 @@ async function getAuthenticatedUserId(): Promise<string> {
   return userId;
 }
 
+// Adapts the canonical transactions table to the legacy Expense type used by
+// receipt-related components.
 function toExpense(row: TransactionRow): Expense {
   const notesParts = [
     row.category ? `Category: ${row.category}` : null,
@@ -45,6 +51,8 @@ export async function initExpensesDb(): Promise<void> {
   // Supabase schema is managed remotely; nothing to initialize on device.
 }
 
+// Returns transactions as expenses for older call sites. New transaction
+// features should prefer lib/transactions.ts directly.
 export async function listExpenses(): Promise<Expense[]> {
   const userId = await getAuthenticatedUserId();
 
@@ -62,6 +70,8 @@ export async function listExpenses(): Promise<Expense[]> {
   return (data as TransactionRow[] | null)?.map(toExpense) ?? [];
 }
 
+// Inserts an expense-style record into the transactions table. The newer
+// createTransaction helper performs more normalization and categorization.
 export async function insertExpense(expense: NewExpense): Promise<void> {
   const userId = await getAuthenticatedUserId();
 

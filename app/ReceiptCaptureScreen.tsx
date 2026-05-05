@@ -16,6 +16,8 @@ import { createTransaction, fetchTransactions } from "../lib/transactions";
 import { extractReceiptText } from "../services/ocr";
 import { parseReceiptText } from "../services/receiptParser";
 
+// Local display shape for transactions returned from lib/transactions.ts.
+// Receipt capture only needs these fields to render the recent expense list.
 type TransactionRow = {
   id: string;
   description: string;
@@ -26,6 +28,9 @@ type TransactionRow = {
   created_at: string;
 };
 
+// Draft fields are strings where the user may edit values before validation
+// and save. Amount stays a string so incomplete input such as "12." can exist
+// temporarily in the form.
 type ExpenseDraft = {
   vendor: string;
   expenseDate: string;
@@ -39,6 +44,8 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Creates the blank manual-entry draft used when users skip OCR and enter a
+// receipt directly.
 function createEmptyDraft(): ExpenseDraft {
   return {
     vendor: "",
@@ -53,6 +60,10 @@ function formatCurrency(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+/**
+ * Coordinates the receipt workflow:
+ * image capture/import -> OCR -> heuristic parsing -> editable draft -> save.
+ */
 export default function ReceiptCaptureScreen(): React.JSX.Element {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +74,8 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Load existing transactions once so the screen has context before the
+    // user scans or manually adds a receipt.
     void refreshTransactions();
   }, []);
 
@@ -83,9 +96,13 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
     setError(null);
     setOcrLoading(true);
     try {
+      // OCR and parsing are intentionally separate so either service can be
+      // changed without rewriting the full screen.
       const rawText = await extractReceiptText(imageUri);
       const parsed = parseReceiptText(rawText);
 
+      // OCR results are best-effort. Every parsed value becomes an editable
+      // draft field rather than being saved immediately.
       setDraft({
         vendor: parsed.vendor || "",
         expenseDate: parsed.expenseDate || todayIsoDate(),
@@ -106,6 +123,7 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
     setError(null);
     setSaving(true);
     try {
+      // createTransaction normalizes the expense amount sign and category.
       await createTransaction({
         description: nextDraft.vendor.trim() || "Unknown Merchant",
         amount: Number(nextDraft.amount),
@@ -125,6 +143,8 @@ export default function ReceiptCaptureScreen(): React.JSX.Element {
     () =>
       transactions
         .filter((t) => t.type === "expense")
+        // Expenses are stored as negative values, so this total displays as a
+        // signed tracked total for the list shown on this screen.
         .reduce((sum, t) => sum + t.amount, 0),
     [transactions]
   );

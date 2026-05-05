@@ -1,5 +1,9 @@
 import type { ParsedReceipt } from "../types";
 
+/**
+ * Builds a YYYY-MM-DD string only when the provided parts form a real calendar
+ * date. The UTC check catches impossible dates like 2026-02-31.
+ */
 function toIsoDate(year: number, month: number, day: number): string | undefined {
   if (month < 1 || month > 12 || day < 1 || day > 31) {
     return undefined;
@@ -17,6 +21,11 @@ function toIsoDate(year: number, month: number, day: number): string | undefined
     .padStart(2, "0")}`;
 }
 
+/**
+ * Supports the two most common receipt date formats seen in OCR text:
+ * - YYYY-MM-DD or YYYY/MM/DD
+ * - MM-DD-YYYY, MM/DD/YYYY, or short two-digit years
+ */
 function parseDate(text: string): string | undefined {
   const isoMatch = text.match(/\b(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
   if (isoMatch) {
@@ -35,6 +44,8 @@ function parseDate(text: string): string | undefined {
   return undefined;
 }
 
+// Converts a validated money token into a positive number. Receipt totals are
+// stored as expenses later, so parsing keeps the raw value positive.
 function parseMoneyValue(raw: string): number | undefined {
   const normalized = raw.replaceAll(/[$,\s]/g, "");
   const amount = Number(normalized);
@@ -44,6 +55,10 @@ function parseMoneyValue(raw: string): number | undefined {
   return amount;
 }
 
+/**
+ * Rejects OCR fragments that look numeric but are not prices, such as phone
+ * numbers, invoice numbers, or quantities. Valid prices must include cents.
+ */
 function isValidMoneyToken(token: string): boolean {
   let index = 0;
 
@@ -76,6 +91,11 @@ function extractMoneyTokens(text: string): string[] {
   return text.match(/\$?[\d,.]+/g)?.filter(isValidMoneyToken) ?? [];
 }
 
+/**
+ * Prefer the first money value on a line containing "total" because that is
+ * usually the checkout amount. If no total line is found, fall back to the
+ * largest valid amount in the receipt text.
+ */
 function findAmount(lines: string[], rawText: string): number | undefined {
   for (const line of lines) {
     if (/total/i.test(line) && !/subtotal/i.test(line)) {
@@ -105,6 +125,7 @@ function findAmount(lines: string[], rawText: string): number | undefined {
   return Math.max(...values);
 }
 
+// Address keywords are used to avoid treating store addresses as vendors.
 const ADDRESS_KEYWORDS = [
   "street",
   "st",
@@ -139,6 +160,8 @@ function isLikelyAddress(line: string): boolean {
   return ADDRESS_KEYWORDS.some((keyword) => new RegExp(`\\b${keyword}\\b`, "i").test(normalized));
 }
 
+// Receipt metadata often appears near the top of the document but should not
+// be selected as the merchant/vendor name.
 function isLikelyMeta(line: string): boolean {
   return /receipt|invoice|total|subtotal|date|tax|cashier|register|change|balance|thank|survey|code|promo|offer|coupon|owner|manager|attn|attention/i.test(
     line
@@ -153,6 +176,11 @@ function isLikelyCityState(line: string): boolean {
   return /\b[A-Za-z\s.'-]+,\s*[A-Z]{2}\b/.test(line);
 }
 
+/**
+ * Scores early receipt lines as possible merchant names. Higher scores favor
+ * short, early, all-caps lines while penalizing addresses, metadata, phone
+ * numbers, city/state lines, and store-number noise.
+ */
 function scoreVendorLine(line: string, index: number): number {
   const trimmed = line.trim();
   if (trimmed.endsWith(":")) {
@@ -205,6 +233,8 @@ function normalizeVendor(line: string): string {
   return cleaned.replaceAll(/\s?#\d+\b/g, "").trim();
 }
 
+// Vendor names usually appear near the top of receipts, so only score the
+// first dozen non-empty lines to reduce false positives from item descriptions.
 function findVendor(lines: string[]): string | undefined {
   const candidateLines = lines.slice(0, 12);
   let bestLine: string | undefined;
@@ -225,6 +255,11 @@ function findVendor(lines: string[]): string | undefined {
   return bestLine ? normalizeVendor(bestLine) : undefined;
 }
 
+/**
+ * Converts raw OCR text into a reviewable receipt draft. The parser is
+ * intentionally heuristic; the UI should let users confirm or edit the result
+ * before saving it as a transaction.
+ */
 export function parseReceiptText(rawText: string): ParsedReceipt {
   const lines = rawText
     .split(/\r?\n/)

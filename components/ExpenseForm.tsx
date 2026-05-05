@@ -9,6 +9,8 @@ type ExpenseFormProps = {
   onSubmit: (draft: ExpenseDraft) => Promise<void> | void;
 };
 
+// Checks both the string format and the actual calendar validity. This rejects
+// values like 2026-02-31 even though they match the YYYY-MM-DD pattern.
 function isIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
@@ -17,6 +19,11 @@ function isIsoDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+/**
+ * Review form used after OCR parsing and by manual receipt entry. The form
+ * keeps a local copy so users can edit drafts without mutating parent state
+ * until they press Save.
+ */
 export function ExpenseForm({
   draft,
   saving,
@@ -26,6 +33,7 @@ export function ExpenseForm({
   const [localDraft, setLocalDraft] = useState<ExpenseDraft>(draft);
   const [error, setError] = useState<string | null>(null);
 
+  // When a new OCR/manual draft arrives, reset local edits and validation.
   useEffect(() => {
     setLocalDraft(draft);
     setError(null);
@@ -33,10 +41,14 @@ export function ExpenseForm({
 
   async function handleSave(): Promise<void> {
     const amount = Number(localDraft.amount);
+    // Store only valid positive receipt amounts; createTransaction later
+    // handles expense sign normalization.
     if (Number.isNaN(amount) || amount <= 0) {
       setError("Amount must be a number greater than 0.");
       return;
     }
+    // Keep receipt dates consistent with transaction filtering and Supabase
+    // date queries elsewhere in the app.
     if (!isIsoDate(localDraft.expenseDate)) {
       setError("Date must be in YYYY-MM-DD format.");
       return;

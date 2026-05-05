@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getSupabaseBrowserClient } from "../lib/supabase/client";
+import { supabase as sharedSupabase } from "../lib/supabase";
 import Toast from "react-native-toast-message";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
@@ -267,22 +268,50 @@ const deleteProfilePicture = async () => {
   }
 };
 
+const isMissingSessionSignOutError = (err: unknown): boolean => {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  return message.toLowerCase().includes("auth session missing");
+};
+
 const handleLogout = async () => {
+  if (loggingOut) {
+    return;
+  }
+
+  setLoggingOut(true);
+  setError("");
+
   try {
-    
     const supabase = getSupabaseBrowserClient();
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    const signOutResults = [
+      await supabase.auth.signOut(),
+      await sharedSupabase.auth.signOut(),
+    ];
+
+    const signOutError = signOutResults.find(
+      (result) => result.error && !isMissingSessionSignOutError(result.error)
+    )?.error;
+    if (signOutError) {
+      throw signOutError;
+    }
 
     Toast.show({ type: "success", text1: "Logged out successfully" });
     setIsLogoutMode(false);
-    setLoggingOut(false);
+    setUser(null);
+    setProfile(null);
 
-    // Navigate to login screen
-    router.replace("/login"); // replace to prevent going back to profile
+    // Remove authenticated screens from the stack before navigating to login.
+    // Without this, the device/browser back button can reveal the dashboard.
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
+    router.replace("/");
   } catch (err) {
     console.error("Logout error:", err);
     Toast.show({ type: "error", text1: "Failed to logout" });
+    setError("Failed to logout");
+  } finally {
+    setLoggingOut(false);
   }
 };
 
@@ -572,12 +601,18 @@ if (loading) {
         </Pressable>
 
         <Pressable
-          style={[styles.primaryButton, { flex: 1, backgroundColor: "#F59E0B" }]}
+          style={[
+            styles.primaryButton,
+            { flex: 1, backgroundColor: "#F59E0B" },
+            loggingOut && styles.disabledButton,
+          ]}
           onPress={handleLogout} // actually logs out
+          disabled={loggingOut}
         >
-          <Text style={styles.primaryButtonText}>Logout</Text>
+          <Text style={styles.primaryButtonText}>{loggingOut ? "Logging out..." : "Logout"}</Text>
         </Pressable>
       </View>
+      {!!error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   </View>
 )}
@@ -650,4 +685,5 @@ const styles = StyleSheet.create({
   modalButtons: { flexDirection: "row", gap: 12, marginTop: 12 },
   centerState: { flex: 1, justifyContent: "center", alignItems: "center" },
   errorText: { color: "#DC2626", marginTop: 4, fontSize: 14 },
+  disabledButton: { opacity: 0.6 },
 });

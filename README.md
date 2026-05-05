@@ -75,7 +75,16 @@ components/           Shared UI components
 lib/                  Data, auth, AI, and transaction logic
 services/             OCR + receipt parsing services
 assets/               Icons and image assets
+docs/                 Developer documentation and data model notes
 ```
+
+## Developer Documentation
+
+Detailed code documentation is available in:
+
+- [`docs/CODE_DOCUMENTATION.md`](docs/CODE_DOCUMENTATION.md) - architecture, route ownership, components, services, and extension points.
+- [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) - Supabase tables, expected columns, constraints, and data conventions.
+- [`docs/TESTING.md`](docs/TESTING.md) - Maestro flows, manual QA paths, and local verification commands.
 
 ## Prerequisites
 
