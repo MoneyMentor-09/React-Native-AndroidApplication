@@ -632,6 +632,20 @@ const renderBudget = ({ item }: { item: Budget }) => {
               style={styles.input}
             />
 
+            {editingBudget && (
+              <View style={styles.deleteActionRow}>
+                <Pressable
+                  style={styles.deleteActionButton}
+                  onPress={() => {
+                    setModalVisible(false);
+                    confirmDelete(editingBudget);
+                  }}
+                >
+                  <Text style={styles.deleteActionText}>Delete Budget</Text>
+                </Pressable>
+              </View>
+            )}
+
             <View style={styles.modalButtons}>
               <Pressable
                 style={[styles.secondaryButton, { flex: 1 }]}
@@ -639,19 +653,53 @@ const renderBudget = ({ item }: { item: Budget }) => {
               >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </Pressable>
+            </View>
+
+            <Pressable style={styles.primaryButton} onPress={saveBudget}>
+              <Text style={styles.primaryButtonText}>Save</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Auto Create Budget Modal */}
+      {autoBudgetModalVisible && (
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Auto Create Budget</Text>
+            <Text style={styles.helperText}>
+              Pick a category and we will use up to the 6 most recent budgets in
+              that category to predict this month's amount.
+            </Text>
+
+            <Pressable
+              style={styles.dropdownInput}
+              onPress={() => setAutoBudgetCategoryPopupVisible(true)}
+            >
+              <Text style={{ color: autoBudgetCategory ? "#000" : "#6B7280" }}>
+                {autoBudgetCategory || "Select Category"}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </Pressable>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.secondaryButton, { flex: 1 }]}
+                onPress={resetAutoBudgetForm}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
 
               <Pressable
                 style={[styles.primaryButton, { flex: 1 }]}
-                onPress={saveBudget}
+                onPress={createAutoBudget}
               >
-                <Text style={styles.primaryButtonText}>Save</Text>
+                <Text style={styles.primaryButtonText}>Create</Text>
               </Pressable>
             </View>
           </View>
         </View>
       )}
-
-      
 
       {/* Category Popup */}
       {categoryPopupVisible && (
@@ -886,6 +934,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginTop: 12,
+  },
+  deleteActionRow: {
+    alignItems: "flex-end",
+    marginTop: 12,
+  },
+  deleteActionButton: {
+    borderWidth: 1,
+    borderColor: "#DC2626",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  deleteActionText: {
+    color: "#DC2626",
+    fontWeight: "600",
+    fontSize: 13,
   },
   deleteBar: {
   backgroundColor: "#FEF2F2",

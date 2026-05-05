@@ -36,7 +36,7 @@ function parseDate(text: string): string | undefined {
 }
 
 function parseMoneyValue(raw: string): number | undefined {
-  const normalized = raw.replace(/[$,\s]/g, "");
+  const normalized = raw.replaceAll(/[$,\s]/g, "");
   const amount = Number(normalized);
   if (Number.isNaN(amount) || amount <= 0) {
     return undefined;
@@ -44,12 +44,44 @@ function parseMoneyValue(raw: string): number | undefined {
   return amount;
 }
 
+function isValidMoneyToken(token: string): boolean {
+  let index = 0;
+
+  if (token[index] === "$") {
+    index += 1;
+  }
+
+  const decimalIndex = token.indexOf(".", index);
+  const integerPart = decimalIndex === -1 ? token.slice(index) : token.slice(index, decimalIndex);
+  const decimalPart = decimalIndex === -1 ? "" : token.slice(decimalIndex + 1);
+
+  if (integerPart.length === 0 || !/^\d+(,\d+)*$/.test(integerPart)) {
+    return false;
+  }
+
+  if (integerPart.includes(",")) {
+    const groups = integerPart.split(",");
+    if (groups[0].length < 1 || groups[0].length > 3) {
+      return false;
+    }
+    if (groups.slice(1).some((group) => group.length !== 3)) {
+      return false;
+    }
+  }
+
+  return decimalPart.length === 2 && /^\d{2}$/.test(decimalPart);
+}
+
+function extractMoneyTokens(text: string): string[] {
+  return text.match(/\$?[\d,.]+/g)?.filter(isValidMoneyToken) ?? [];
+}
+
 function findAmount(lines: string[], rawText: string): number | undefined {
   for (const line of lines) {
     if (/total/i.test(line) && !/subtotal/i.test(line)) {
-      const amountMatch = line.match(/([$]?\d{1,3}(?:,\d{3})*(?:\.\d{2})|[$]?\d+(?:\.\d{2}))/i);
+      const amountMatch = extractMoneyTokens(line)[0];
       if (amountMatch) {
-        const value = parseMoneyValue(amountMatch[1]);
+        const value = parseMoneyValue(amountMatch);
         if (value !== undefined) {
           return value;
         }
@@ -57,7 +89,7 @@ function findAmount(lines: string[], rawText: string): number | undefined {
     }
   }
 
-  const allMatches = rawText.match(/\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})|\$?\d+(?:\.\d{2})/g);
+  const allMatches = extractMoneyTokens(rawText);
   if (!allMatches || allMatches.length === 0) {
     return undefined;
   }
@@ -143,7 +175,7 @@ function scoreVendorLine(line: string, index: number): number {
   score += Math.max(0, 12 - index * 2);
   score += Math.max(0, 12 - trimmed.length / 2);
 
-  const upperOnly = trimmed.replace(/[^A-Za-z]/g, "");
+  const upperOnly = trimmed.replaceAll(/[^A-Za-z]/g, "");
   const isAllCaps = upperOnly.length > 0 && upperOnly === upperOnly.toUpperCase();
   if (isAllCaps) {
     score += 6;
@@ -169,8 +201,8 @@ function scoreVendorLine(line: string, index: number): number {
 }
 
 function normalizeVendor(line: string): string {
-  const cleaned = line.replace(/\s{2,}/g, " ").trim();
-  return cleaned.replace(/\s?#\d+\b/g, "").trim();
+  const cleaned = line.replaceAll(/\s{2,}/g, " ").trim();
+  return cleaned.replaceAll(/\s?#\d+\b/g, "").trim();
 }
 
 function findVendor(lines: string[]): string | undefined {

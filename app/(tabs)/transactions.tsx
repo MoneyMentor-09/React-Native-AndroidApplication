@@ -11,9 +11,10 @@ TouchableWithoutFeedback,
 Keyboard
 } from "react-native";
 
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useState, useCallback, useEffect } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
+import { analyzeSuspiciousTransactions } from "@/lib/transactions/suspicious";
 
 /* Categories same as web */
 const INCOME_CATEGORIES = [
@@ -56,6 +57,7 @@ const [search,setSearch] = useState("");
 const [filterType,setFilterType] = useState("all");
 const [filterCategory] = useState("all");
 const [selectedTransactions,setSelectedTransactions] = useState<string[]>([]);
+const [highlightedTransactionIds,setHighlightedTransactionIds] = useState<string[]>([]);
 const [editModalVisible,setEditModalVisible] = useState(false);
 const [editingTransaction,setEditingTransaction] = useState<Transaction | null>(null);
 const [editDescription,setEditDescription] = useState("");
@@ -66,6 +68,18 @@ const [editType,setEditType] = useState<"income"|"expense">("expense");
 const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 const [deleteMode, setDeleteMode] = useState<"single" | "bulk">("single");
 const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+const params = useLocalSearchParams<{
+  alertPatternId?: string | string[];
+  alertTransactionId?: string | string[];
+}>();
+const alertPatternId = Array.isArray(params.alertPatternId)
+  ? params.alertPatternId[0]
+  : params.alertPatternId;
+const alertTransactionId = Array.isArray(params.alertTransactionId)
+  ? params.alertTransactionId[0]
+  : params.alertTransactionId;
+const activeAlertPatternId = alertPatternId || null;
+const activeAlertTransactionId = alertTransactionId || null;
 
 useEffect(() => {
   if (editType === "income") {
@@ -74,6 +88,32 @@ useEffect(() => {
     setEditCategory("");
   }
 }, [editType]);
+
+useEffect(() => {
+  if (!activeAlertPatternId && !activeAlertTransactionId) {
+    setHighlightedTransactionIds([]);
+    return;
+  }
+
+  setSearch("");
+  setFilterType("all");
+
+  const relatedIds = new Set<string>();
+
+  if (activeAlertPatternId) {
+    const matchedAlert = analyzeSuspiciousTransactions(transactions).find(
+      suspiciousAlert => suspiciousAlert.id === activeAlertPatternId
+    );
+
+    matchedAlert?.transactions.forEach(tx => relatedIds.add(tx.id));
+  }
+
+  if (relatedIds.size === 0 && activeAlertTransactionId) {
+    relatedIds.add(activeAlertTransactionId);
+  }
+
+  setHighlightedTransactionIds([...relatedIds]);
+}, [transactions, activeAlertPatternId, activeAlertTransactionId]);
 
 
 
@@ -241,14 +281,23 @@ const toggleSelectTransaction = (id: string) => {
   });
 };
 
+const clearAlertHighlight = () => {
+  setHighlightedTransactionIds([]);
+  router.setParams({
+    alertPatternId: "",
+    alertTransactionId: "",
+  });
+};
 
 const renderTransaction = ({ item }: { item: Transaction }) => {
   const selected = selectedTransactions.includes(item.id);
+  const highlighted = highlightedTransactionIds.includes(item.id);
 
   return (
     <Pressable
   style={({ pressed }) => [
     styles.transactionRow,
+    highlighted && styles.transactionRowHighlighted,
     selected && styles.transactionRowSelected,
     pressed && styles.transactionRowPressed,
     ]}
@@ -259,13 +308,9 @@ const renderTransaction = ({ item }: { item: Transaction }) => {
           handleEditTransaction(item);
         }
       }}
-          onLongPress={() => {
-      if (!isSelectionMode) {
+      onLongPress={() => {
         toggleSelectTransaction(item.id);
-      } else {
-        toggleSelectTransaction(item.id);
-      }
-    }}
+      }}
     >
       <View style={{ flex: 1 }}>
         <Text style={styles.txDescription}>
@@ -354,9 +399,25 @@ onPress={()=>setFilterType("expense")}
 
 </View>
 
+{highlightedTransactionIds.length > 0 && (
+  <View style={styles.highlightBar}>
+    <Text style={styles.highlightText}>
+      {highlightedTransactionIds.length} related transaction{highlightedTransactionIds.length === 1 ? "" : "s"} highlighted
+    </Text>
 
-<Modal visible={editModalVisible} animationType="slide">
-  <View style={{ flex: 1, padding: 20, backgroundColor: "#fff" }}>
+    <Pressable
+      style={styles.clearHighlightButton}
+      onPress={clearAlertHighlight}
+    >
+      <Text style={styles.clearHighlightText}>Clear</Text>
+    </Pressable>
+  </View>
+)}
+
+
+<Modal visible={editModalVisible} transparent animationType="fade">
+  <View style={styles.editModalOverlay}>
+  <View style={styles.editModalCard}>
 
     {/* HEADER */}
     <Text style={{ fontSize: 20, fontWeight: "700", marginBottom: 20 }}>
@@ -511,28 +572,23 @@ onPress={()=>setFilterType("expense")}
     </Pressable>
 
     {/* DELETE */}
-    <Pressable
-      style={[
-        styles.secondaryButton,
-        { borderColor: "#DC2626" }
-      ]}
-      onPress={() => {
-        if (editingTransaction) {
-          setEditModalVisible(false);
-          confirmSingleDelete(editingTransaction.id);
-        }
-      }}
-    >
-      <Text
-        style={[
-          styles.secondaryButtonText,
-          { color: "#DC2626" }
-        ]}
+    <View style={styles.deleteActionRow}>
+      <Pressable
+        style={styles.deleteActionButton}
+        onPress={() => {
+          if (editingTransaction) {
+            setEditModalVisible(false);
+            confirmSingleDelete(editingTransaction.id);
+          }
+        }}
       >
-        Delete Transaction
-      </Text>
-    </Pressable>
+        <Text style={styles.deleteActionText}>
+          Delete Transaction
+        </Text>
+      </Pressable>
+    </View>
 
+  </View>
   </View>
 </Modal>
 <Modal
@@ -716,6 +772,40 @@ filterActive:{
 backgroundColor:"#84aafc"
 },
 
+highlightBar: {
+  width: "100%",
+  backgroundColor: "#FFEDD5",
+  borderColor: "#FDBA74",
+  borderWidth: 1,
+  borderRadius: 12,
+  paddingVertical: 10,
+  paddingHorizontal: 12,
+  marginBottom: 8,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+},
+
+highlightText: {
+  color: "#9A3412",
+  fontWeight: "700",
+  flex: 1,
+  marginRight: 8,
+},
+
+clearHighlightButton: {
+  borderWidth: 1,
+  borderColor: "#EA580C",
+  borderRadius: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+},
+
+clearHighlightText: {
+  color: "#9A3412",
+  fontWeight: "700",
+},
+
 transactionRow: {
   flexDirection: "row",
   alignItems: "center",
@@ -729,6 +819,18 @@ transactionRow: {
   shadowRadius: 6,
   shadowOffset: { width: 0, height: 2 },
   //elevation: 1,
+},
+
+transactionRowHighlighted: {
+  backgroundColor: "#FFF7ED",
+  borderColor: "#F97316",
+  borderWidth: 2,
+  borderLeftWidth: 6,
+  shadowColor: "#F97316",
+  shadowOpacity: 0.12,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
 },
 
 transactionRowSelected: {
@@ -919,6 +1021,34 @@ menuText: {
   borderRadius:14,
   paddingHorizontal:48,
   paddingVertical:10
+},
+editModalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.3)",
+  justifyContent: "center",
+  paddingHorizontal: 16,
+},
+editModalCard: {
+  backgroundColor: "#fff",
+  borderRadius: 18,
+  padding: 20,
+  maxHeight: "82%",
+},
+deleteActionRow: {
+  alignItems: "flex-end",
+  marginTop: 12,
+},
+deleteActionButton: {
+  borderWidth: 1,
+  borderColor: "#DC2626",
+  borderRadius: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+},
+deleteActionText: {
+  color: "#DC2626",
+  fontWeight: "600",
+  fontSize: 13,
 }
 
 });

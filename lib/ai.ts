@@ -15,7 +15,7 @@ export type QuickQuestion = {
 };
 
 export const QUICK_QUESTIONS: QuickQuestion[] = [
-  { id: "q1", label: "What is a budget?", prompt: "What is a budget?" },
+  { id: "q1", label: "Make a budget", prompt: "I want to make a budget." },
   {
     id: "q2",
     label: "How much did I spend this month?",
@@ -63,8 +63,6 @@ export const QUICK_QUESTIONS: QuickQuestion[] = [
   },
 ];
 
-// Paste your current Codespaces forwarded URL here.
-// Example: const BACKEND_URL = "https://your-name-3001.app.github.dev";
 const BACKEND_URL = "https://reactnativebackendai.onrender.com";
 
 function formatMoney(amount: number): string {
@@ -147,7 +145,17 @@ function buildTransactionContext(transactions: Transaction[]) {
   };
 }
 
-export async function getHelpResponse(question: string): Promise<string> {
+function cleanMessagesForBackend(messages: ChatMessage[]) {
+  return messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+}
+
+export async function getHelpResponse(
+  question: string,
+  conversationMessages: ChatMessage[] = []
+): Promise<string> {
   const transactions = await fetchTransactions();
   const financialContext = buildTransactionContext(transactions);
 
@@ -158,6 +166,7 @@ export async function getHelpResponse(question: string): Promise<string> {
     },
     body: JSON.stringify({
       message: question,
+      messages: cleanMessagesForBackend(conversationMessages),
       financialContext,
     }),
   });
@@ -174,7 +183,10 @@ export async function getHelpResponse(question: string): Promise<string> {
   }
 
   if (!response.ok) {
-    throw new Error(data?.error || "Failed to get AI response.");
+    const details = data?.details ? ` Details: ${data.details}` : "";
+    throw new Error(
+      `${data?.error || "Failed to get AI response."}${details}`
+    );
   }
 
   if (!data?.reply || typeof data.reply !== "string") {
