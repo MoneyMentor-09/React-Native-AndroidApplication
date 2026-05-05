@@ -1,0 +1,16 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+- runFlow: _login.yaml
+- tapOn: "Transactions"
+- tapOn: "Scan Receipt"
+- assertVisible: "Receipt Capture"
+- tapOn: "Add Manually"
+- assertVisible: "Review Expense"
+- tapOn: "Store or merchant name"
+- inputText: "Maestro Receipt Test"
+- tapOn: "0.00"
+- inputText: "18.40"
+- tapOn: "Save Expense"
+- assertVisible: "Maestro Receipt Test"

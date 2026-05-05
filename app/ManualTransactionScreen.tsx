@@ -20,6 +20,8 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { createTransaction } from "../lib/transactions";
 import { router } from "expo-router/build/exports";
 
+// Screen-local category lists keep the picker simple. If global categories
+// change, keep these aligned with lib/transactions.ts and the budget screens.
 const expenseCategories = [
   "Food & Dining",
   "Transportation",
@@ -44,6 +46,8 @@ const incomeCategories = [
 ];
 
 export default function ManualTransactionScreen() {
+  // Form state is kept local until the user taps Save. createTransaction owns
+  // the final database normalization and insert.
   const [type, setType] = useState<"expense" | "income">("expense");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -53,24 +57,29 @@ export default function ManualTransactionScreen() {
   const [showDate, setShowDate] = useState(false);  
   const availableCategories =  type === "income" ? incomeCategories : expenseCategories;
     useEffect(() => {
+      // Default income transactions to a valid income category when users
+      // switch from expense to income mode.
       if (type === "income") {
         setCategory("Salary");
       }
     }, [type]);
     
-  // Amount validation
+  // Allow whole dollars or cents up to two decimal places while the user types.
   function handleAmountChange(text: string) {
     const regex = /^\d*(\.\d{0,2})?$/;
     if (regex.test(text)) setAmount(text);
   }
 
   async function saveTransaction() {
+    // Require the minimum fields needed to create a useful transaction record.
     if (!description || !amount || !category) {
       Alert.alert("Missing fields", "Please fill all required fields");
       return;
     }
 
     let value = Number.parseFloat(amount);
+    // Keep the sign convention consistent with the shared transaction helper:
+    // expenses are negative and income is positive.
     if (type === "expense") value = -Math.abs(value);
     else value = Math.abs(value);
 

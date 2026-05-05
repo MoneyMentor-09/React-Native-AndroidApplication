@@ -1,0 +1,15 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+- runFlow: _login.yaml
+- tapOn: "Go to Profile"
+- assertVisible: "Personal Information"
+- assertVisible: "Edit Profile"
+- assertVisible: "Change Password"
+- scrollUntilVisible:
+    element: "Logout"
+- tapOn: "Logout"
+- assertVisible: "Confirm Logout"
+- tapOn: "Logout"
+- assertVisible: "Welcome back"

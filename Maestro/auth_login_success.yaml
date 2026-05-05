@@ -1,0 +1,9 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+- runFlow: _login.yaml
+- assertVisible: "Transactions"
+- assertVisible: "Budget"
+- assertVisible: "Alerts"
+- assertNotVisible: "Chat"

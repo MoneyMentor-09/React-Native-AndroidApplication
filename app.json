@@ -17,6 +17,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.moneymentor.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/letter-m.png",
         "backgroundColor": "#ffffff"
@@ -32,6 +33,12 @@
       "expo-web-browser",
       "expo-font",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "844c4d63-f98f-43f8-9614-684bfa01c52c"
+      }
+    }
   }
 }

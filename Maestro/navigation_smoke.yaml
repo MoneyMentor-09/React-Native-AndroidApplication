@@ -1,0 +1,22 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+- runFlow: _login.yaml
+- assertVisible: "Dashboard"
+- tapOn: "Transactions"
+- assertVisible: "Search transactions..."
+- tapOn: "Budget"
+- assertVisible: "Add Budget"
+- tapOn: "Alerts"
+- assertVisible: "Alerts"
+- assertNotVisible: "Chat"
+- assertNotVisible: "Discuss Recent Activity"
+- assertNotVisible: "Discuss Recent Activity"
+# - assertVisible: "Search transactions..."
+- tapOn: "Open menu"
+- assertVisible: "Menu"
+- tapOn: "Budget"
+- assertVisible: "Add Budget"
+- tapOn: "Go to Profile"
+- assertVisible: "Manage your account settings and preferences"

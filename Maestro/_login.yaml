@@ -1,0 +1,16 @@
+appId: com.moneymentor.mobile
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Get Started for Free"
+- tapOn: "Sign In"
+- assertVisible: "Welcome back"
+- tapOn: "Email"
+- inputText: ${TEST_EMAIL}
+- tapOn: "Password"
+- inputText: ${TEST_PASSWORD}
+- scrollUntilVisible:
+    element: "Login"
+- tapOn: "Login"
+- assertVisible: "Dashboard"
